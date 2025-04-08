@@ -1,0 +1,70 @@
+{
+  "name": "opengov-mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server that enables a client, such as Claude Desktop, to access open government data through Socrata APIs",
+  "private": false,
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "bin": {
+    "opengov-mcp-server": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc && shx chmod +x ./dist/index.js",
+    "prepublishOnly": "npm run build",
+    "start": "node ./dist/index.js",
+    "lint": "eslint --ext .ts ./ --ignore-pattern \"**/*.d.ts\"",
+    "lint:fix": "eslint --fix --ext .ts ./ --ignore-pattern \"**/*.d.ts\"",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "anthropic",
+    "claude-desktop",
+    "claude",
+    "data",
+    "government",
+    "mcp",
+    "model-context-protocol",
+    "open-government",
+    "opendata",
+    "opengov",
+    "socrata"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/srobbin/opengov-mcp-server"
+  },
+  "author": "Scott Robbin <scott@robbin.co>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/srobbin/opengov-mcp-server/issues"
+  },
+  "homepage": "https://github.com/srobbin/opengov-mcp-server#readme",
+  "files": [
+    "dist/index.js",
+    "dist/index.d.ts",
+    "dist/tools/socrata-tools.js",
+    "dist/tools/socrata-tools.d.ts",
+    "dist/utils",
+    "LICENSE",
+    "README.md"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.8.0",
+    "axios": "^1.8.4",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@typescript-eslint/eslint-plugin": "^8.29.0",
+    "@typescript-eslint/parser": "^8.29.0",
+    "eslint": "^9.23.0",
+    "prettier": "^3.5.3",
+    "shx": "^0.4.0",
+    "typescript": "^5.8.2",
+    "vitest": "^3.1.1"
+  }
+}
