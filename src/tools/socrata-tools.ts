@@ -181,13 +181,25 @@ async function handleDataAccess(params: {
   query?: string;
   limit?: number;
   offset?: number;
+  select?: string;
+  where?: string;
+  order?: string;
+  group?: string;
+  having?: string;
+  q?: string;
 }): Promise<Record<string, unknown>[]> {
   const { 
     datasetId, 
     domain = getDefaultDomain(),
     query,
     limit = 10,
-    offset = 0
+    offset = 0,
+    select,
+    where,
+    order,
+    group,
+    having,
+    q
   } = params;
   
   const apiParams: Record<string, unknown> = {
@@ -195,8 +207,17 @@ async function handleDataAccess(params: {
     $offset: offset,
   };
   
+  // Handle comprehensive query parameter if provided
   if (query) {
     apiParams.$query = query;
+  } else {
+    // Otherwise handle individual SoQL parameters
+    if (select) apiParams.$select = select;
+    if (where) apiParams.$where = where;
+    if (order) apiParams.$order = order;
+    if (group) apiParams.$group = group;
+    if (having) apiParams.$having = having;
+    if (q) apiParams.$q = q;
   }
   
   const baseUrl = `https://${domain}`;
@@ -246,32 +267,68 @@ export const UNIFIED_SOCRATA_TOOL: Tool = {
       },
       domain: {
         type: 'string',
-        description: 'Optional domain (hostname only, without protocol)',
+        description: 'Optional domain (hostname only, without protocol). Used with all operation types.',
       },
-      // Catalog specific parameters
+      // Search and query parameters
       query: {
         type: 'string',
-        description: '[catalog] Optional search query to filter datasets',
+        description: 'Search or query string with different uses depending on operation type:' +
+          '\n- For type=catalog: Search query to filter datasets' +
+          '\n- For type=data-access: SoQL query string for complex data filtering',
       },
       // Dataset specific parameters
       datasetId: {
         type: 'string',
-        description: '[dataset-metadata, column-info, data-access] The dataset ID (e.g., 6zsd-86xi)',
+        description: 'Dataset identifier required for the following operations:' +
+          '\n- For type=dataset-metadata: Get dataset details' +
+          '\n- For type=column-info: Get column information' +
+          '\n- For type=data-access: Specify which dataset to query (e.g., 6zsd-86xi)',
       },
       // Data access specific parameters
       soqlQuery: {
         type: 'string',
-        description: '[data-access] Optional SoQL query string for filtering data',
+        description: 'For type=data-access only. Optional SoQL query string for filtering data.' +
+          '\nThis is an alias for the query parameter and takes precedence if both are provided.',
+      },
+      // Additional SoQL parameters for data-access
+      select: {
+        type: 'string',
+        description: 'For type=data-access only. Specifies which columns to return in the result set.',
+      },
+      where: {
+        type: 'string',
+        description: 'For type=data-access only. Filters the rows to be returned (e.g., "magnitude > 3.0").',
+      },
+      order: {
+        type: 'string',
+        description: 'For type=data-access only. Orders the results based on specified columns (e.g., "date DESC").',
+      },
+      group: {
+        type: 'string',
+        description: 'For type=data-access only. Groups results for aggregate functions.',
+      },
+      having: {
+        type: 'string',
+        description: 'For type=data-access only. Filters for grouped results, similar to where but for grouped data.',
+      },
+      // Full-text search parameter
+      q: {
+        type: 'string',
+        description: 'For type=data-access only. Full text search parameter for free-text searching across the dataset.',
       },
       // Pagination parameters
       limit: {
         type: 'number',
-        description: '[catalog, data-access] Maximum number of results to return',
+        description: 'Maximum number of results to return:' +
+          '\n- For type=catalog: Limits dataset results' +
+          '\n- For type=data-access: Limits data records returned',
         default: 10,
       },
       offset: {
         type: 'number',
-        description: '[catalog, data-access] Number of results to skip for pagination',
+        description: 'Number of results to skip for pagination:' +
+          '\n- For type=catalog: Skips dataset results' +
+          '\n- For type=data-access: Skips data records for pagination',
         default: 0,
       },
     },
@@ -312,7 +369,19 @@ export async function handleSocrataTool(params: Record<string, unknown>): Promis
       if (params.soqlQuery) {
         params.query = params.soqlQuery;
       }
-      return handleDataAccess(params as { datasetId: string; domain?: string; query?: string; limit?: number; offset?: number });
+      return handleDataAccess(params as { 
+        datasetId: string; 
+        domain?: string; 
+        query?: string; 
+        limit?: number; 
+        offset?: number;
+        select?: string;
+        where?: string;
+        order?: string;
+        group?: string;
+        having?: string;
+        q?: string;
+      });
     case 'site-metrics':
       return handleSiteMetrics(params as { domain?: string });
     default:
