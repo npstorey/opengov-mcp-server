@@ -1,4 +1,4 @@
-import { Tool } from '@modelcontextprotocol/sdk/types.js'; // ADDED .js
+import { Tool } from '@modelcontextprotocol/sdk/types'; // REMOVED .js
 import {
   fetchFromSocrataApi,
   DatasetMetadata,
@@ -7,8 +7,6 @@ import {
   ColumnInfo,
   PortalMetrics
 } from '../utils/api.js'; // Keep .js for local modules
-
-// --- Rest of the file remains the same ---
 
 // Get the default domain from environment
 const getDefaultDomain = () => process.env.DATA_PORTAL_URL?.replace(/^https?:\/\//, '');
