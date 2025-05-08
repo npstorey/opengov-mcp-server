@@ -58,8 +58,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       resultSize = JSON.stringify(result).length;
     } catch (stringifyError) {
       server.sendLoggingMessage({
-        level: 'warn',
-        data: { message: `Could not stringify result for tool: ${name}`, tool: name, args },
+        // Corrected log level from 'warn' to 'error'
+        level: 'error',
+        data: { message: `Could not stringify result for tool: ${name}`, tool: name, args, error: stringifyError },
       });
       // Handle potentially circular structures or other stringify issues
       result = { stringifyError: 'Could not serialize result' };
@@ -112,18 +113,20 @@ async function runServer() {
 
     // Bind to Render’s port or default
     const port = Number(process.env.PORT) || 8000;
+    const basePath = '/mcp'; // Store basePath for logging
 
     // Use the transport class from the documentation
     const transport = new StreamableHTTPServerTransport({
        host: '0.0.0.0', // Listen on all interfaces for container environments
        port,
-       basePath: '/mcp', // Set base path if needed, otherwise '/'
+       basePath: basePath, // Set base path if needed, otherwise '/'
        // sessionIdGenerator: undefined, // Use if needed for stateless mode
     });
 
     // Connect the transport to the server logic
     await transport.connect(server);
-    console.log(`🚀 MCP server listening on port ${port} at path ${transport.basePath || '/'}`);
+    // Corrected console log: Removed transport.basePath access
+    console.log(`🚀 MCP server listening on port ${port} at path ${basePath}`);
 
   } catch (err) {
     // Log fatal startup errors
