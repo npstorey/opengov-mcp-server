@@ -1,20 +1,20 @@
 #!/usr/bin/env node
 
 import 'dotenv/config';
-// REMOVE .js extensions for SDK imports
-import { Server } from '@modelcontextprotocol/sdk/server';
-import { HttpServerTransport } from '@modelcontextprotocol/sdk/server/http';
+// Add back specific .js / index.js suffixes
+import { Server } from '@modelcontextprotocol/sdk/server/index.js'; // ADDED /index.js
+import { HttpServerTransport } from '@modelcontextprotocol/sdk/server/http.js'; // ADDED .js
 import {
   Tool,
   CallToolRequestSchema,
   ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types';
+} from '@modelcontextprotocol/sdk/types.js'; // ADDED .js
 
 import {
   SOCRATA_TOOLS,
   handleSocrataTool,
-} from './tools/socrata-tools.js'; // Keep .js for local modules
-import { getPortalInfo, PortalInfo } from './utils/portal-info.js'; // Keep .js for local modules
+} from './tools/socrata-tools.js';
+import { getPortalInfo, PortalInfo } from './utils/portal-info.js';
 
 // 1) Initialize the MCP server
 const server = new Server(
