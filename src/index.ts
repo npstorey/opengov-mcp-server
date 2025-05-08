@@ -108,12 +108,13 @@ async function runServer() {
        basePath: basePath,
     });
 
-    // *** CORRECTED CONNECTION LOGIC ***
-    // Connect the server TO the transport. This likely starts the transport implicitly.
-    await server.connect(transport);
+    // *** SWAPPED ORDER ***
+    // Start the transport listening process FIRST
+    await transport.start();
 
-    // REMOVED: await transport.start(); // This line caused the "Transport already started" error
-    // *** END CORRECTED LOGIC ***
+    // THEN, connect the server TO the now-listening transport
+    await server.connect(transport);
+    // *** END SWAPPED ORDER ***
 
     console.log(`🚀 MCP server listening on port ${port} at path ${basePath}`);
 
