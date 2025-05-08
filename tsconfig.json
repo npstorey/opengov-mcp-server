@@ -6,15 +6,14 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,
-    "noImplicitAny": false,        
+    "noImplicitAny": false,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "rootDir": "./src",
     "outDir": "./dist",
     "declaration": true,
     "sourceMap": true,
-    "isolatedModules": true,
-    "types": ["node"]             
+    "isolatedModules": true
   },
   "include": ["src/**/*"],
   "exclude": [
