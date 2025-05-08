@@ -36,14 +36,14 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/srobbin/opengov-mcp-server"
+    "url": "https://github.com/npstorey/opengov-mcp-server"
   },
   "author": "Scott Robbin <scott@robbin.co>",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/srobbin/opengov-mcp-server/issues"
+    "url": "https://github.com/npstorey/opengov-mcp-server/issues"
   },
-  "homepage": "https://github.com/srobbin/opengov-mcp-server#readme",
+  "homepage": "https://github.com/npstorey/opengov-mcp-server#readme",
   "files": [
     "dist/index.js",
     "dist/index.d.ts",
@@ -59,15 +59,13 @@
     "dotenv": "^16.4.7"
   },
   "devDependencies": {
-    "@modelcontextprotocol/sdk": "^1.8.0",
-    "axios": "^1.8.4",
-    "dotenv": "^16.4.7",
+    "typescript": "^5.8.2",
+    "@types/node": "^18.0.0",
     "@typescript-eslint/eslint-plugin": "^8.29.0",
     "@typescript-eslint/parser": "^8.29.0",
     "eslint": "^9.23.0",
     "prettier": "^3.5.3",
     "shx": "^0.4.0",
-    "typescript": "^5.8.2",
     "vitest": "^3.1.1"
   }
 }
