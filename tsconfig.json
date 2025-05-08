@@ -7,6 +7,7 @@
     "strict": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
+    "rootDir": "./src",         ← add this
     "outDir": "./dist",
     "declaration": true,
     "sourceMap": true,
