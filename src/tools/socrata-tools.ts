@@ -1,77 +1,79 @@
-import { Tool } from '@modelcontextprotocol/sdk/types'; // UPDATED
-import { 
-  fetchFromSocrataApi, 
-  DatasetMetadata, 
-  CategoryInfo, 
-  TagInfo, 
+import { Tool } from '@modelcontextprotocol/sdk/types.js'; // ADDED .js
+import {
+  fetchFromSocrataApi,
+  DatasetMetadata,
+  CategoryInfo,
+  TagInfo,
   ColumnInfo,
-  PortalMetrics 
+  PortalMetrics
 } from '../utils/api.js'; // Keep .js for local modules
+
+// --- Rest of the file remains the same ---
 
 // Get the default domain from environment
 const getDefaultDomain = () => process.env.DATA_PORTAL_URL?.replace(/^https?:\/\//, '');
 
 // Handler for catalog functionality
-async function handleCatalog(params: { 
-  query?: string; 
+async function handleCatalog(params: {
+  query?: string;
   domain?: string;
-  limit?: number; 
-  offset?: number; 
+  limit?: number;
+  offset?: number;
 }): Promise<DatasetMetadata[]> {
   const { query, domain = getDefaultDomain(), limit = 10, offset = 0 } = params;
-  
+
   const apiParams: Record<string, unknown> = {
     limit,
     offset,
     search_context: domain // Add search_context parameter with the domain
   };
-  
+
   if (query) {
     apiParams.q = query;
   }
 
   const baseUrl = `https://${domain}`;
   const response = await fetchFromSocrataApi<{ results: DatasetMetadata[] }>(
-    '/api/catalog/v1', 
+    '/api/catalog/v1',
     apiParams,
     baseUrl
   );
-  
+
   return response.results;
 }
 
 // Handler for categories functionality
-async function handleCategories(params: { 
-  domain?: string; 
+async function handleCategories(params: {
+  domain?: string;
 }): Promise<CategoryInfo[]> {
   const { domain = getDefaultDomain() } = params;
-  
+
   const apiParams: Record<string, unknown> = {
     search_context: domain // Add search_context parameter with the domain
   };
 
   const baseUrl = `https://${domain}`;
-  
+
   try {
     // First try the standard domain_categories endpoint
     const response = await fetchFromSocrataApi<CategoryInfo[]>(
-      '/api/catalog/v1/domain_categories', 
+      '/api/catalog/v1/domain_categories',
       apiParams,
       baseUrl
     );
-    
+
     // If we get a valid array response, return it
     if (Array.isArray(response) && response.length > 0) {
       return response;
     }
-    
+
     // Otherwise, try the alternate approach with only=categories parameter
     const altResponse = await fetchFromSocrataApi<{categories: CategoryInfo[]}>(
       '/api/catalog/v1',
       { ...apiParams, only: 'categories' },
       baseUrl
     );
-    
+
     return altResponse.categories || [];
   } catch (error) {
     // If the primary endpoint fails, try the alternate approach
@@ -81,7 +83,7 @@ async function handleCategories(params: {
         { ...apiParams, only: 'categories' },
         baseUrl
       );
-      
+
       return altResponse.categories || [];
     } catch {
       // If both approaches fail, rethrow the original error
@@ -91,37 +93,37 @@ async function handleCategories(params: {
 }
 
 // Handler for tags functionality
-async function handleTags(params: { 
-  domain?: string; 
+async function handleTags(params: {
+  domain?: string;
 }): Promise<TagInfo[]> {
   const { domain = getDefaultDomain() } = params;
-  
+
   const apiParams: Record<string, unknown> = {
     search_context: domain // Add search_context parameter with the domain
   };
 
   const baseUrl = `https://${domain}`;
-  
+
   try {
     // First try the standard domain_tags endpoint
     const response = await fetchFromSocrataApi<TagInfo[]>(
-      '/api/catalog/v1/domain_tags', 
+      '/api/catalog/v1/domain_tags',
       apiParams,
       baseUrl
     );
-    
+
     // If we get a valid array response, return it
     if (Array.isArray(response) && response.length > 0) {
       return response;
     }
-    
+
     // Otherwise, try the alternate approach with only=tags parameter
     const altResponse = await fetchFromSocrataApi<{tags: TagInfo[]}>(
       '/api/catalog/v1',
       { ...apiParams, only: 'tags' },
       baseUrl
     );
-    
+
     return altResponse.tags || [];
   } catch (error) {
     // If the primary endpoint fails, try the alternate approach
@@ -131,7 +133,7 @@ async function handleTags(params: {
         { ...apiParams, only: 'tags' },
         baseUrl
       );
-      
+
       return altResponse.tags || [];
     } catch {
       // If both approaches fail, rethrow the original error
@@ -141,42 +143,42 @@ async function handleTags(params: {
 }
 
 // Handler for dataset metadata functionality
-async function handleDatasetMetadata(params: { 
-  datasetId: string; 
-  domain?: string; 
+async function handleDatasetMetadata(params: {
+  datasetId: string;
+  domain?: string;
 }): Promise<Record<string, unknown>> {
   const { datasetId, domain = getDefaultDomain() } = params;
-  
+
   const baseUrl = `https://${domain}`;
   const response = await fetchFromSocrataApi<Record<string, unknown>>(
-    `/api/views/${datasetId}`, 
+    `/api/views/${datasetId}`,
     {},
     baseUrl
   );
-  
+
   return response;
 }
 
 // Handler for column information functionality
-async function handleColumnInfo(params: { 
-  datasetId: string; 
-  domain?: string; 
+async function handleColumnInfo(params: {
+  datasetId: string;
+  domain?: string;
 }): Promise<ColumnInfo[]> {
   const { datasetId, domain = getDefaultDomain() } = params;
-  
+
   const baseUrl = `https://${domain}`;
   const response = await fetchFromSocrataApi<ColumnInfo[]>(
-    `/api/views/${datasetId}/columns`, 
+    `/api/views/${datasetId}/columns`,
     {},
     baseUrl
   );
-  
+
   return response;
 }
 
 // Handler for data access functionality
-async function handleDataAccess(params: { 
-  datasetId: string; 
+async function handleDataAccess(params: {
+  datasetId: string;
   domain?: string;
   query?: string;
   limit?: number;
@@ -188,8 +190,8 @@ async function handleDataAccess(params: {
   having?: string;
   q?: string;
 }): Promise<Record<string, unknown>[]> {
-  const { 
-    datasetId, 
+  const {
+    datasetId,
     domain = getDefaultDomain(),
     query,
     limit = 10,
@@ -201,12 +203,12 @@ async function handleDataAccess(params: {
     having,
     q
   } = params;
-  
+
   const apiParams: Record<string, unknown> = {
     $limit: limit,
     $offset: offset,
   };
-  
+
   // Handle comprehensive query parameter if provided
   if (query) {
     apiParams.$query = query;
@@ -219,30 +221,30 @@ async function handleDataAccess(params: {
     if (having) apiParams.$having = having;
     if (q) apiParams.$q = q;
   }
-  
+
   const baseUrl = `https://${domain}`;
   const response = await fetchFromSocrataApi<Record<string, unknown>[]>(
-    `/resource/${datasetId}.json`, 
+    `/resource/${datasetId}.json`,
     apiParams,
     baseUrl
   );
-  
+
   return response;
 }
 
 // Handler for site metrics functionality
-async function handleSiteMetrics(params: { 
-  domain?: string; 
+async function handleSiteMetrics(params: {
+  domain?: string;
 }): Promise<PortalMetrics> {
   const { domain = getDefaultDomain() } = params;
-  
+
   const baseUrl = `https://${domain}`;
   const response = await fetchFromSocrataApi<PortalMetrics>(
-    '/api/site_metrics.json', 
+    '/api/site_metrics.json',
     {},
     baseUrl
   );
-  
+
   return response;
 }
 
@@ -258,7 +260,7 @@ export const UNIFIED_SOCRATA_TOOL: Tool = {
         enum: ['catalog', 'categories', 'tags', 'dataset-metadata', 'column-info', 'data-access', 'site-metrics'],
         description: 'The type of operation to perform:' +
           '\n- catalog: List datasets with optional search' +
-          '\n- categories: List all dataset categories' + 
+          '\n- categories: List all dataset categories' +
           '\n- tags: List all dataset tags' +
           '\n- dataset-metadata: Get detailed metadata for a specific dataset' +
           '\n- column-info: Get column details for a specific dataset' +
@@ -340,7 +342,7 @@ export const UNIFIED_SOCRATA_TOOL: Tool = {
 // Main handler for the unified tool that routes to the appropriate function
 export async function handleSocrataTool(params: Record<string, unknown>): Promise<unknown> {
   const { type } = params;
-  
+
   switch (type) {
     case 'catalog':
       return handleCatalog(params as { query?: string; domain?: string; limit?: number; offset?: number });
@@ -369,11 +371,11 @@ export async function handleSocrataTool(params: Record<string, unknown>): Promis
       if (params.soqlQuery) {
         params.query = params.soqlQuery;
       }
-      return handleDataAccess(params as { 
-        datasetId: string; 
-        domain?: string; 
-        query?: string; 
-        limit?: number; 
+      return handleDataAccess(params as {
+        datasetId: string;
+        domain?: string;
+        query?: string;
+        limit?: number;
         offset?: number;
         select?: string;
         where?: string;
