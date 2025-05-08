@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Create mock versions of the required classes
-vi.mock('@modelcontextprotocol/sdk/server', () => { // UPDATED
+vi.mock('@modelcontextprotocol/sdk/server/index.js', () => { // ADDED /index.js
   return {
     Server: vi.fn().mockImplementation(() => ({
       connect: vi.fn(),
@@ -11,7 +11,7 @@ vi.mock('@modelcontextprotocol/sdk/server', () => { // UPDATED
   };
 });
 
-vi.mock('@modelcontextprotocol/sdk/server/stdio', () => { // UPDATED (removed .js)
+vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => { // ADDED .js
   return {
     StdioServerTransport: vi.fn().mockImplementation(() => ({
       start: vi.fn(),
@@ -22,15 +22,15 @@ vi.mock('@modelcontextprotocol/sdk/server/stdio', () => { // UPDATED (removed .j
 });
 
 // Import the mocked modules
-import { Server } from '@modelcontextprotocol/sdk/server'; // UPDATED
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio'; // UPDATED (removed .js)
+import { Server } from '@modelcontextprotocol/sdk/server/index.js'; // ADDED /index.js
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'; // ADDED .js
 
 describe('Server initialization', () => {
   beforeEach(() => {
     // Clear all mocks before each test
     vi.clearAllMocks();
   });
-  
+
   it('should create server with correct metadata', () => {
     // Manually execute the server setup similar to index.ts
     new Server(
@@ -45,7 +45,7 @@ describe('Server initialization', () => {
         }
       }
     );
-    
+
     // Assert that Server was called with correct parameters
     expect(Server).toHaveBeenCalledWith(
       {
@@ -60,16 +60,16 @@ describe('Server initialization', () => {
       }
     );
   });
-  
+
   it('should connect server to transport', async () => {
     const server = new Server(
       { name: 'test', version: '1.0.0' },
       { capabilities: { tools: {}, logging: {} } }
     );
-    
+
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    
+
     expect(server.connect).toHaveBeenCalledWith(transport);
   });
 });
