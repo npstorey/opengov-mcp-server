@@ -14,13 +14,7 @@
   "scripts": {
     "clean": "rm -rf dist",
     "build": "npm run clean && esbuild src/index.ts --bundle --outfile=dist/server.js --platform=node --format=esm --target=node18 --sourcemap",
-    "prepublishOnly": "npm run build",
-    "start": "node ./dist/server.js",
-    "lint": "eslint --ext .ts ./ --ignore-pattern \"**/*.d.ts\"",
-    "lint:fix": "eslint --fix --ext .ts ./ --ignore-pattern \"**/*.d.ts\"",
-    "format": "prettier --write .",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "start": "node ./dist/server.js"
   },
   "keywords": [
     "anthropic",
