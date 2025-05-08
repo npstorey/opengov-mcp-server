@@ -14,13 +14,7 @@
   "scripts": {
     "clean": "rm -rf dist",
     "build": "npm run clean && esbuild src/index.ts --bundle --outfile=dist/server.js --platform=node --format=esm --target=node18 --sourcemap",
-    "prepublishOnly": "npm run build",
-    "start": "node ./dist/server.js",
-    "lint": "eslint --ext .ts ./ --ignore-pattern \"**/*.d.ts\"",
-    "lint:fix": "eslint --fix --ext .ts ./ --ignore-pattern \"**/*.d.ts\"",
-    "format": "prettier --write .",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "start": "node ./dist/server.js"
   },
   "keywords": [
     "anthropic",
@@ -52,9 +46,8 @@
     "README.md"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "latest", // Or the specific version you settled on
+    "@modelcontextprotocol/sdk": "latest",
     "axios": "^1.8.4"
-    // dotenv was removed from here
   },
   "devDependencies": {
     "typescript": "^5.8.2",
