@@ -1,4 +1,4 @@
-import { Tool } from '@modelcontextprotocol/sdk/types.js'; // Use .js suffix
+import { Tool } from '@modelcontextprotocol/sdk/types'; // NO suffix
 import {
   fetchFromSocrataApi,
   DatasetMetadata,
