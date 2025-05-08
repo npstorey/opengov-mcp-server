@@ -1,20 +1,20 @@
 // src/global.d.ts
 
 // --- Manually declare SDK modules and exports FOR TYPESCRIPT ONLY ---
-// Declare modules using the specifier WITHOUT .js suffix
+// Declare modules using the specifier WITH .js suffix
 
-declare module '@modelcontextprotocol/sdk/server' {
-  export const Server: any; // Assuming Server is exported here
+declare module '@modelcontextprotocol/sdk/server/index.js' { // Added /index.js
+  export const Server: any;
 }
 
-declare module '@modelcontextprotocol/sdk/server/http' {
-  export const HttpServerTransport: any; // Assuming HttpServerTransport is exported here
+declare module '@modelcontextprotocol/sdk/server/http.js' { // Added .js
+  export const HttpServerTransport: any;
 }
 
-declare module '@modelcontextprotocol/sdk/types' {
-  export type Tool = any; // Tool is used as a Type
-  export const CallToolRequestSchema: any; // Likely a Zod schema object (value)
-  export const ListToolsRequestSchema: any; // Likely a Zod schema object (value)
+declare module '@modelcontextprotocol/sdk/types.js' { // Added .js
+  export type Tool = any;
+  export const CallToolRequestSchema: any;
+  export const ListToolsRequestSchema: any;
 }
 
 // --- process.env typing ---
