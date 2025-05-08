@@ -11,8 +11,9 @@
     "forceConsistentCasingInFileNames": true,
     "rootDir": "./src",
     "outDir": "./dist",
-    "declaration": true,
-    "sourceMap": true,
+    "declaration": true, // Keep generating .d.ts files for potential package use
+    "sourceMap": true, // Keep generating .js.map files for debugging
+    "declarationMap": false, // CHANGED: Disable .d.ts.map files
     "isolatedModules": true,
     "types": ["node"],
     "resolveJsonModule": true
