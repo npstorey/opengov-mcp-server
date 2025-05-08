@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext", // Correct for ESM output
-    "moduleResolution": "NodeNext", // Correct for modern resolution
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,
@@ -16,7 +16,6 @@
     "isolatedModules": true,
     "types": ["node"],
     "resolveJsonModule": true
-    // Removed baseUrl and paths
   },
   "include": ["src/**/*"],
   "exclude": [
