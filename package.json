@@ -52,7 +52,7 @@
     "README.md"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "latest",
+    "@modelcontextprotocol/sdk": "^1.10.2",
     "axios": "^1.8.4",
     "dotenv": "^16.4.7"
   },
