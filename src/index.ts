@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 
-// import 'dotenv/config'; // Ensure this is removed or commented out
+// import 'dotenv/config'; // Ensure removed
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'; // Using Streamable based on previous step
+import { Server } from '@modelcontextprotocol/sdk/server/index.js'; // Suffix needed
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'; // Suffix needed
 import {
   Tool,
   CallToolRequestSchema,
   ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+} from '@modelcontextprotocol/sdk/types.js'; // Suffix needed
 
 import {
   SOCRATA_TOOLS,
