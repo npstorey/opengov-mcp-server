@@ -13,7 +13,7 @@
     "declaration": true,
     "sourceMap": true,
     "declarationMap": false,
-    "isolatedModules": true,
+    "isolatedModules": false,
     "types": ["node"],
     "resolveJsonModule": true
   },
