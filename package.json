@@ -7,14 +7,14 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "main": "./dist/index.js",
+  "main": "./dist/server.js",
   "bin": {
-    "opengov-mcp-server": "./dist/index.js"
+    "opengov-mcp-server": "./dist/server.js"
   },
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "npm run clean && tsc --outDir dist",
-    "start": "node ./dist/index.js"
+    "build": "npm run clean && esbuild src/index.ts --bundle --outfile=dist/server.js --platform=node --format=esm --target=node18 --sourcemap --external:@modelcontextprotocol/sdk/*",
+    "start": "node ./dist/server.js"
   },
   "keywords": [
     "anthropic",
@@ -40,7 +40,8 @@
   },
   "homepage": "https://github.com/npstorey/opengov-mcp-server#readme",
   "files": [
-    "dist",
+    "dist/server.js",
+    "dist/server.js.map",
     "LICENSE",
     "README.md"
   ],
@@ -57,6 +58,7 @@
     "eslint": "^9.23.0",
     "prettier": "^3.5.3",
     "shx": "^0.4.0",
-    "vitest": "^3.1.1"
+    "vitest": "^3.1.1",
+    "esbuild": "^0.20.0"
   }
 }
