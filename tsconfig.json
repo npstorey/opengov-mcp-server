@@ -7,7 +7,7 @@
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "noImplicitAny": false,
-    "skipLibCheck": true, // Ensure this is true
+    "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     // "rootDir": "./src", // Not needed for esbuild
     // "outDir": "./dist", // Not needed for esbuild
