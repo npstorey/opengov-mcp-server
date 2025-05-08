@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 
 import 'dotenv/config';
-// Remove .js extensions for SDK imports
-import { Server } from '@modelcontextprotocol/sdk/server';
-import { HttpServerTransport } from '@modelcontextprotocol/sdk/server/http';
+// Use explicit .js / index.js suffixes
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { HttpServerTransport } from '@modelcontextprotocol/sdk/server/http.js';
 import {
   Tool,
   CallToolRequestSchema,
   ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types';
+} from '@modelcontextprotocol/sdk/types.js';
 
 import {
   SOCRATA_TOOLS,
