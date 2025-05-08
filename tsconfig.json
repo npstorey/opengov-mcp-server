@@ -1,19 +1,19 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "NodeNext", // Keep NodeNext for ESM output format
+    "moduleResolution": "Node16", // CHANGED: Use Node16 resolution strategy
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "noImplicitAny": false,
     // "skipLibCheck": true, // REMOVED / COMMENTED OUT
     "forceConsistentCasingInFileNames": true,
-    "rootDir": "./src", // Keep for tsc build
-    "outDir": "./dist", // Keep for tsc build
+    "rootDir": "./src",
+    "outDir": "./dist",
     "declaration": true,
     "sourceMap": true,
-    "declarationMap": false, // Keep this false from previous attempt
+    // "declarationMap": false, // REMOVED / COMMENTED OUT
     "isolatedModules": true,
     "types": ["node"],
     "resolveJsonModule": true
