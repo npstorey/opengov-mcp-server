@@ -7,14 +7,15 @@
   "engines": {
     "node": ">=18.0.0"
   },
+  "main": "./dist/server.js",
   "bin": {
-    "opengov-mcp-server": "./dist/index.js"
+    "opengov-mcp-server": "./dist/server.js"
   },
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "npm run clean && tsc --outDir dist --traceResolution",
+    "build": "npm run clean && esbuild src/index.ts --bundle --outfile=dist/server.js --platform=node --format=esm --target=node18 --sourcemap",
     "prepublishOnly": "npm run build",
-    "start": "node ./dist/index.js",
+    "start": "node ./dist/server.js",
     "lint": "eslint --ext .ts ./ --ignore-pattern \"**/*.d.ts\"",
     "lint:fix": "eslint --fix --ext .ts ./ --ignore-pattern \"**/*.d.ts\"",
     "format": "prettier --write .",
@@ -45,11 +46,8 @@
   },
   "homepage": "https://github.com/npstorey/opengov-mcp-server#readme",
   "files": [
-    "dist/index.js",
-    "dist/index.d.ts",
-    "dist/tools/socrata-tools.js",
-    "dist/tools/socrata-tools.d.ts",
-    "dist/utils",
+    "dist/server.js",
+    "dist/server.js.map",
     "LICENSE",
     "README.md"
   ],
@@ -67,6 +65,7 @@
     "eslint": "^9.23.0",
     "prettier": "^3.5.3",
     "shx": "^0.4.0",
-    "vitest": "^3.1.1"
+    "vitest": "^3.1.1",
+    "esbuild": "^0.20.0"
   }
 }
