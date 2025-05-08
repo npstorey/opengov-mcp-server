@@ -108,13 +108,12 @@ async function runServer() {
        basePath: basePath,
     });
 
-    // *** SWAPPED ORDER ***
-    // Start the transport listening process FIRST
-    await transport.start();
-
-    // THEN, connect the server TO the now-listening transport
+    // *** REVERTED CONNECTION LOGIC ***
+    // Connect the server TO the transport. This should implicitly start it.
     await server.connect(transport);
-    // *** END SWAPPED ORDER ***
+
+    // REMOVED explicit transport.start() call
+    // *** END REVERTED LOGIC ***
 
     console.log(`🚀 MCP server listening on port ${port} at path ${basePath}`);
 
