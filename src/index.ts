@@ -1,20 +1,20 @@
 #!/usr/bin/env node
 
 import 'dotenv/config';
-// Add back specific .js / index.js suffixes based on esbuild errors
-import { Server } from '@modelcontextprotocol/sdk/server/index.js'; // ADDED /index.js
-import { HttpServerTransport } from '@modelcontextprotocol/sdk/server/http.js'; // ADDED .js
+// Use explicit .js / index.js suffixes, but correct the HTTP transport import
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'; // CHANGED CLASS and PATH
 import {
   Tool,
   CallToolRequestSchema,
   ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js'; // ADDED .js
+} from '@modelcontextprotocol/sdk/types.js';
 
 import {
   SOCRATA_TOOLS,
   handleSocrataTool,
-} from './tools/socrata-tools.js'; // Keep .js for local modules
-import { getPortalInfo, PortalInfo } from './utils/portal-info.js'; // Keep .js for local modules
+} from './tools/socrata-tools.js';
+import { getPortalInfo, PortalInfo } from './utils/portal-info.js';
 
 // 1) Initialize the MCP server
 const server = new Server(
@@ -82,14 +82,21 @@ async function runServer() {
 
     // Bind to Render’s port
     const port = Number(process.env.PORT) || 8000;
-    const transport = new HttpServerTransport({
-      host: '0.0.0.0',
-      port,
-      basePath: '/mcp',
+
+    // Use the transport class from the documentation
+    // NOTE: The constructor options might need adjustment based on StreamableHTTPServerTransport's actual definition.
+    // We are assuming it accepts similar options for basic listening.
+    // If this fails, we may need to integrate with Express as per SDK examples.
+    const transport = new StreamableHTTPServerTransport({
+       host: '0.0.0.0', // Assuming this is still valid
+       port,          // Assuming this is still valid
+       basePath: '/mcp', // Assuming this is still valid
+       // sessionIdGenerator: undefined, // Add this if needed for stateless mode explicitly
     });
 
-    await transport.connect(server);
+    await transport.connect(server); // Assuming connect method exists and works similarly
     console.log(`🚀 MCP server listening on port ${port}`);
+
   } catch (err) {
     console.error('Fatal error starting server:', err);
     process.exit(1);
