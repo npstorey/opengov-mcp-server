@@ -7,13 +7,12 @@
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "noImplicitAny": false,
-    "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    // "rootDir": "./src", // Not needed for esbuild
-    // "outDir": "./dist", // Not needed for esbuild
-    // "declaration": true, // Not needed unless publishing lib
-    "sourceMap": true, // esbuild can use this
-    // "declarationMap": false, // Not needed
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "declaration": true,
+    "sourceMap": true,
+    "declarationMap": false,
     "isolatedModules": true,
     "types": ["node"],
     "resolveJsonModule": true
