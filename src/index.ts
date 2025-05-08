@@ -1,144 +1,101 @@
 #!/usr/bin/env node
 
+import 'dotenv/config';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { HttpServerTransport } from '@modelcontextprotocol/sdk/server/http.js';
 import {
   Tool,
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import 'dotenv/config';
 
-// Import Socrata unified tool
-import { 
-  SOCRATA_TOOLS, 
-  handleSocrataTool
+import {
+  SOCRATA_TOOLS,
+  handleSocrataTool,
 } from './tools/socrata-tools.js';
 import { getPortalInfo, PortalInfo } from './utils/portal-info.js';
 
-// Initialize the server
+// 1) Initialize the MCP server
 const server = new Server(
   {
-    name: 'opengov-mcp',
-    version: '0.1.0'
+    name: 'opengov-mcp-server',
+    version: '0.1.1',
   },
   {
     capabilities: {
       tools: {},
-      logging: {}
-    }
+      logging: {},
+    },
   }
 );
 
-// Handle tool calls
+// 2) Handle incoming tool‐calls (JSON-RPC)
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
-  
   try {
     server.sendLoggingMessage({
       level: 'info',
-      data: {
-        message: `Handling tool call: ${name}`,
-        tool: name,
-        arguments: args,
-        timestamp: new Date().toISOString(),
-      },
+      data: { message: `Handling tool: ${name}`, tool: name, args },
     });
 
     let result: unknown;
-
     if (name === 'get_data') {
-      // Handle the unified data retrieval tool
       result = await handleSocrataTool(args || {});
     } else {
       throw new Error(`Unknown tool: ${name}`);
     }
 
-    // Log success
     server.sendLoggingMessage({
       level: 'info',
-      data: {
-        message: `Successfully executed tool: ${name}`,
-        tool: name,
-        resultSize: JSON.stringify(result).length,
-        timestamp: new Date().toISOString(),
-      },
+      data: { message: `Success: ${name}`, size: JSON.stringify(result).length },
     });
 
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result) }],
-      isError: false,
-    };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    
+    return { content: [{ type: 'text', text: JSON.stringify(result) }], isError: false };
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
     server.sendLoggingMessage({
       level: 'error',
-      data: {
-        message: `Error handling tool ${name}: ${errorMessage}`,
-        tool: name,
-        arguments: args,
-        timestamp: new Date().toISOString(),
-        error: errorMessage,
-      },
+      data: { message: `Error: ${errorMessage}`, tool: name, args },
     });
-    
-    return {
-      content: [{ type: 'text', text: `Error: ${errorMessage}` }],
-      isError: true,
-    };
+    return { content: [{ type: 'text', text: `Error: ${errorMessage}` }], isError: true };
   }
 });
 
-// Enhanced tool with portal context
+// 3) Enhance tool list with portal info
 function enhanceToolsWithPortalInfo(tools: Tool[], portalInfo: PortalInfo): Tool[] {
-  return tools.map(tool => {
-    // Create a copy of the tool
-    const enhancedTool: Tool = { ...tool };
-    
-    // Add portal info to the description
-    enhancedTool.description = `[${portalInfo.title}] ${tool.description}`;
-    
-    return enhancedTool;
-  });
+  return tools.map((tool) => ({
+    ...tool,
+    description: `[${portalInfo.title}] ${tool.description}`,
+  }));
 }
 
-// Start the server
+// 4) Bootstrap and start HTTP transport
 async function runServer() {
   try {
-    // Get information about the data portal
+    // Fetch portal metadata
     const portalInfo = await getPortalInfo();
-    // Don't use console.log as it interferes with the JSON-RPC protocol
-    // Instead, we'll log through the MCP logging capability after connecting
-    
-    // Update tools list with portal info
     const enhancedTools = enhanceToolsWithPortalInfo(SOCRATA_TOOLS, portalInfo);
-    
-    // Update the tools handler
-    server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: enhancedTools,
-    }));
-    
-    // Connect to transport
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-    
-    server.sendLoggingMessage({
-      level: 'info',
-      data: {
-        message: `OpenGov MCP Server started for data portal: ${portalInfo.title}`,
-        portalInfo,
-        timestamp: new Date().toISOString(),
-      },
+
+    // Serve tool list
+    server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: enhancedTools }));
+
+    // Bind to Render’s port
+    const port = Number(process.env.PORT) || 8000;
+    const transport = new HttpServerTransport({
+      host: '0.0.0.0',
+      port,
+      basePath: '/mcp',
     });
-  } catch (error) {
-    console.error('Error during server initialization:', error);
+
+    await transport.connect(server);
+    console.log(`🚀 MCP server listening on port ${port}`);
+  } catch (err) {
+    console.error('Fatal error starting server:', err);
     process.exit(1);
   }
 }
 
-runServer().catch((error) => {
-  // Need to use console.error for startup failures as logging API isn't available yet
-  console.error('Fatal error running server:', error);
+runServer().catch((err) => {
+  console.error('Uncaught initialization error:', err);
   process.exit(1);
 });
