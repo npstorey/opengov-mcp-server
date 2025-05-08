@@ -59,7 +59,9 @@
     "dotenv": "^16.4.7"
   },
   "devDependencies": {
-    "@types/node": "^22.14.0",
+    "@modelcontextprotocol/sdk": "^1.8.0",
+    "axios": "^1.8.4",
+    "dotenv": "^16.4.7",
     "@typescript-eslint/eslint-plugin": "^8.29.0",
     "@typescript-eslint/parser": "^8.29.0",
     "eslint": "^9.23.0",
