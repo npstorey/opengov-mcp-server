@@ -12,7 +12,7 @@
   },
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "npm run clean && tsc --outDir dist --traceResolution", // ADDED --traceResolution
+    "build": "npm run clean && tsc --outDir dist --traceResolution", // Ensure NO comment here
     "prepublishOnly": "npm run build",
     "start": "node ./dist/index.js",
     "lint": "eslint --ext .ts ./ --ignore-pattern \"**/*.d.ts\"",
