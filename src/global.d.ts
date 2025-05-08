@@ -1,23 +1,38 @@
 // src/global.d.ts
 
-// --- Manually declare the problematic module ---
-// This tells TypeScript that when it encounters an import for the string literal
-// '@modelcontextprotocol/sdk/server/http.js',
-// it should understand that this module exports 'HttpServerTransport'
-// and that the definition for 'HttpServerTransport' can be found by looking at
-// the module '@modelcontextprotocol/sdk/dist/esm/server/http'
-// (which TypeScript would resolve to .../http.d.ts within the SDK).
-
+// --- Manually declare the problematic module and its exports FOR TYPESCRIPT ONLY ---
+// This tells TypeScript that the module identified by the string
+// '@modelcontextprotocol/sdk/server/http.js' exists and has a named export 'HttpServerTransport'.
+// This does NOT change how Node.js resolves this module at runtime.
+// It just satisfies TypeScript's type checker.
 declare module '@modelcontextprotocol/sdk/server/http.js' {
-  // Re-export only the specific member we need from its actual type definition location.
-  // This assumes 'HttpServerTransport' is a named export from
-  // 'node_modules/@modelcontextprotocol/sdk/dist/esm/server/http.d.ts'.
-  export { HttpServerTransport } from '@modelcontextprotocol/sdk/dist/esm/server/http';
-  
-  // If HttpServerTransport were a default export (less likely for classes):
-  // import MainInterfaceOrClass from '@modelcontextprotocol/sdk/dist/esm/server/http';
-  // export default MainInterfaceOrClass;
+  // We need to know the actual type of HttpServerTransport.
+  // Since we can't easily inspect it, we'll use 'any' for now as a placeholder.
+  // Ideally, we'd import the type from its real definition if we could resolve that separately
+  // for type-checking purposes only, but that's complex here.
+  export const HttpServerTransport: any; // Or a more specific type if known, e.g., constructor type
 }
+
+// If other modules like '@modelcontextprotocol/sdk/server/index.js' or '@modelcontextprotocol/sdk/types.js'
+// also cause runtime 'ERR_MODULE_NOT_FOUND' due to similar global.d.ts issues,
+// or if they cause TS2307 (cannot find module) at compile time again,
+// we'll need to add similar blocks for them.
+
+// For example, if '@modelcontextprotocol/sdk/server/index.js' was also problematic:
+/*
+declare module '@modelcontextprotocol/sdk/server/index.js' {
+  export const Server: any; // Replace 'any' with the actual type if it can be determined
+}
+*/
+
+// And for '@modelcontextprotocol/sdk/types.js':
+/*
+declare module '@modelcontextprotocol/sdk/types.js' {
+  export const Tool: any;
+  export const CallToolRequestSchema: any;
+  export const ListToolsRequestSchema: any;
+}
+*/
 
 // --- process.env typing ---
 declare namespace NodeJS {
