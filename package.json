@@ -52,9 +52,9 @@
     "README.md"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.10.2",
-    "axios": "^1.8.4",
-    "dotenv": "^16.4.7"
+    "@modelcontextprotocol/sdk": "latest", // Or the specific version you settled on
+    "axios": "^1.8.4"
+    // dotenv was removed from here
   },
   "devDependencies": {
     "typescript": "^5.8.2",
