@@ -9,13 +9,12 @@ declare module '@modelcontextprotocol/sdk/types.js' {
   export const ListToolsRequestSchema: any;
 }
 
-// --- third-party imports ---
-declare module 'axios';
-
 // --- process.env typing (optional but silences process errors) ---
 declare namespace NodeJS {
   interface ProcessEnv {
     REDIS_URL: string;
     DATA_PORTAL_URL?: string;
+    // Add other environment variables here if needed
+    PORT?: string; 
   }
 }
