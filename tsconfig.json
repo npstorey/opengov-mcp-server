@@ -1,19 +1,19 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext", // Keep NodeNext for ESM output format
-    "moduleResolution": "Node16", // CHANGED: Use Node16 resolution strategy
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "noImplicitAny": false,
-    // "skipLibCheck": true, // REMOVED / COMMENTED OUT
+    "skipLibCheck": true, // Ensure this is true
     "forceConsistentCasingInFileNames": true,
-    "rootDir": "./src",
-    "outDir": "./dist",
-    "declaration": true,
-    "sourceMap": true,
-    // "declarationMap": false, // REMOVED / COMMENTED OUT
+    // "rootDir": "./src", // Not needed for esbuild
+    // "outDir": "./dist", // Not needed for esbuild
+    // "declaration": true, // Not needed unless publishing lib
+    "sourceMap": true, // esbuild can use this
+    // "declarationMap": false, // Not needed
     "isolatedModules": true,
     "types": ["node"],
     "resolveJsonModule": true
