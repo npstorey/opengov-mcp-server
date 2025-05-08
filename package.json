@@ -7,18 +7,14 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "main": "./dist/index.js", // Point back to tsc output
+  "main": "./dist/index.js",
   "bin": {
-    "opengov-mcp-server": "./dist/index.js" // Point back to tsc output
+    "opengov-mcp-server": "./dist/index.js"
   },
   "scripts": {
     "clean": "rm -rf dist",
-    // Revert build script to use tsc
     "build": "npm run clean && tsc --outDir dist",
-    // Optionally remove --traceResolution if logs are too verbose now
-    // "build": "npm run clean && tsc --outDir dist --traceResolution",
-    "start": "node ./dist/index.js" // Point back to tsc output
-    // Keep other scripts if desired (lint, test, etc.) or use the simplified version from earlier
+    "start": "node ./dist/index.js"
   },
   "keywords": [
     "anthropic",
@@ -44,14 +40,13 @@
   },
   "homepage": "https://github.com/npstorey/opengov-mcp-server#readme",
   "files": [
-    "dist", // Include the whole dist folder now
+    "dist",
     "LICENSE",
     "README.md"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "latest", // Keep latest or specific recent version
+    "@modelcontextprotocol/sdk": "latest",
     "axios": "^1.8.4"
-    // dotenv is removed
   },
   "devDependencies": {
     "typescript": "^5.8.2",
@@ -63,7 +58,5 @@
     "prettier": "^3.5.3",
     "shx": "^0.4.0",
     "vitest": "^3.1.1"
-    // esbuild can be removed
-    // "esbuild": "^0.20.0"
   }
 }
