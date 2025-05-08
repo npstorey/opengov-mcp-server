@@ -7,14 +7,16 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "main": "./dist/server.js",
+  "main": "./dist/index.js",
   "bin": {
-    "opengov-mcp-server": "./dist/server.js"
+    "opengov-mcp-server": "./dist/index.js"
   },
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "npm run clean && esbuild src/index.ts --bundle --outfile=dist/server.js --platform=node --format=esm --target=node18 --sourcemap --external:@modelcontextprotocol/sdk/*",
-    "start": "node ./dist/server.js"
+    "prebuild-check": "echo '--- Checking SDK installation ---' && npm ls @modelcontextprotocol/sdk && echo '--- Listing SDK dist contents (recursive, full path) ---' && ls -R \"$(npm root)/@modelcontextprotocol/sdk/dist\" && echo '--- SDK package.json ---' && cat \"$(npm root)/@modelcontextprotocol/sdk/package.json\" && echo '--- Listing all SDK files (full paths) ---' && find \"$(npm root)/@modelcontextprotocol/sdk\" -type f && echo '--- End Check ---'",
+    "build:tsc": "tsc --outDir dist",
+    "build": "npm run clean && npm run prebuild-check && npm run build:tsc",
+    "start": "node ./dist/index.js"
   },
   "keywords": [
     "anthropic",
@@ -40,13 +42,13 @@
   },
   "homepage": "https://github.com/npstorey/opengov-mcp-server#readme",
   "files": [
-    "dist/server.js",
-    "dist/server.js.map",
+    "dist/index.js",
+    "dist/index.js.map",
     "LICENSE",
     "README.md"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "latest",
+    "@modelcontextprotocol/sdk": "1.10.2",
     "axios": "^1.8.4"
   },
   "devDependencies": {
