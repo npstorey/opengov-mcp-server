@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 
 import 'dotenv/config';
-// Remove .js extensions for SDK imports
-import { Server } from '@modelcontextprotocol/sdk/server'; // NO suffix
-import { HttpServerTransport } from '@modelcontextprotocol/sdk/server/http'; // NO suffix
+// Add back specific .js / index.js suffixes based on esbuild errors
+import { Server } from '@modelcontextprotocol/sdk/server/index.js'; // ADDED /index.js
+import { HttpServerTransport } from '@modelcontextprotocol/sdk/server/http.js'; // ADDED .js
 import {
   Tool,
   CallToolRequestSchema,
   ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types'; // NO suffix
+} from '@modelcontextprotocol/sdk/types.js'; // ADDED .js
 
 import {
   SOCRATA_TOOLS,
