@@ -15,6 +15,9 @@ declare namespace NodeJS {
 // The paths must exactly match your import statements including the .js suffix.
 
 declare module '@modelcontextprotocol/sdk/server/index.js' {
+  // Define the transport type vaguely here for the method signature
+  type McpServerTransport = any; // Replace 'any' if a base type is known/exported
+
   export class Server {
     constructor(meta: { name: string; version: string }, capabilities: { capabilities: any });
     setRequestHandler(
@@ -22,13 +25,14 @@ declare module '@modelcontextprotocol/sdk/server/index.js' {
       handler: (request: { params: any }) => Promise<{ content: Array<{type: string, text: string}>; isError: boolean }>
     ): void;
     sendLoggingMessage(log: { level: 'info' | 'error'; data: any }): void;
-    // You might need to declare 'connect' if you try StdioServerTransport again.
-    // connect(transport: any): Promise<void>;
+    // ADDED: connect method declaration based on likely usage pattern
+    connect(transport: McpServerTransport): Promise<void>;
   }
   // Add any other exports from '.../server/index.js' that you might use.
 }
 
 declare module '@modelcontextprotocol/sdk/server/streamableHttp.js' {
+  // We know connect doesn't exist here now, so we don't declare it.
   export class StreamableHTTPServerTransport {
     constructor(options: {
       host: string;
@@ -36,7 +40,11 @@ declare module '@modelcontextprotocol/sdk/server/streamableHttp.js' {
       basePath: string;
       sessionIdGenerator?: () => string; // if you were to use it
     });
-    connect(server: any): Promise<void>; // 'any' should be 'Server' type from above ideally
+    // Declare the 'start' method which exists on the prototype
+    start(): Promise<void>;
+    // Declare 'close' if needed
+    // close(): Promise<void>;
+    // Note: 'send' is also available but usually called internally by the Server
   }
   // Add any other exports from '.../server/streamableHttp.js'.
 }
