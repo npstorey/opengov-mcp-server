@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// REMOVE .js extensions for SDK imports in mocks and actual imports
-vi.mock('@modelcontextprotocol/sdk/server', () => {
+// Add back specific .js / index.js suffixes for mocks and imports
+vi.mock('@modelcontextprotocol/sdk/server/index.js', () => { // ADDED /index.js
   return {
     Server: vi.fn().mockImplementation(() => ({
       connect: vi.fn(),
@@ -11,7 +11,7 @@ vi.mock('@modelcontextprotocol/sdk/server', () => {
   };
 });
 
-vi.mock('@modelcontextprotocol/sdk/server/stdio', () => {
+vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => { // ADDED .js
   return {
     StdioServerTransport: vi.fn().mockImplementation(() => ({
       start: vi.fn(),
@@ -22,8 +22,8 @@ vi.mock('@modelcontextprotocol/sdk/server/stdio', () => {
 });
 
 // Import the mocked modules
-import { Server } from '@modelcontextprotocol/sdk/server';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js'; // ADDED /index.js
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'; // ADDED .js
 
 describe('Server initialization', () => {
   beforeEach(() => {
