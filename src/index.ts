@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 
 import 'dotenv/config';
-// Use explicit .js / index.js suffixes
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { HttpServerTransport } from '@modelcontextprotocol/sdk/server/http.js';
+// Remove .js extensions for SDK imports
+import { Server } from '@modelcontextprotocol/sdk/server'; // NO suffix
+import { HttpServerTransport } from '@modelcontextprotocol/sdk/server/http'; // NO suffix
 import {
   Tool,
   CallToolRequestSchema,
   ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+} from '@modelcontextprotocol/sdk/types'; // NO suffix
 
 import {
   SOCRATA_TOOLS,
