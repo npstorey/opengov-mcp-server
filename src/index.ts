@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
-import 'dotenv/config';
-// Use explicit .js / index.js suffixes, but correct the HTTP transport import
+// import 'dotenv/config'; // REMOVED
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'; // CHANGED CLASS and PATH
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'; // Using Streamable based on previous step
 import {
   Tool,
   CallToolRequestSchema,
@@ -84,17 +84,14 @@ async function runServer() {
     const port = Number(process.env.PORT) || 8000;
 
     // Use the transport class from the documentation
-    // NOTE: The constructor options might need adjustment based on StreamableHTTPServerTransport's actual definition.
-    // We are assuming it accepts similar options for basic listening.
-    // If this fails, we may need to integrate with Express as per SDK examples.
     const transport = new StreamableHTTPServerTransport({
-       host: '0.0.0.0', // Assuming this is still valid
-       port,          // Assuming this is still valid
-       basePath: '/mcp', // Assuming this is still valid
-       // sessionIdGenerator: undefined, // Add this if needed for stateless mode explicitly
+       host: '0.0.0.0',
+       port,
+       basePath: '/mcp',
+       // sessionIdGenerator: undefined, // Use if needed for stateless mode
     });
 
-    await transport.connect(server); // Assuming connect method exists and works similarly
+    await transport.connect(server);
     console.log(`🚀 MCP server listening on port ${port}`);
 
   } catch (err) {
