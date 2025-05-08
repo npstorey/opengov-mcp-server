@@ -54,7 +54,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       resultSize = JSON.stringify(result).length;
     } catch (stringifyError) {
       server.sendLoggingMessage({
-        level: 'error', // Changed from 'warn'
+        level: 'error',
         data: { message: `Could not stringify result for tool: ${name}`, tool: name, args, error: stringifyError },
       });
       result = { stringifyError: 'Could not serialize result' };
@@ -108,13 +108,12 @@ async function runServer() {
        basePath: basePath,
     });
 
-    // *** CHANGED CONNECTION LOGIC ***
-    // Connect the server TO the transport
+    // *** CORRECTED CONNECTION LOGIC ***
+    // Connect the server TO the transport. This likely starts the transport implicitly.
     await server.connect(transport);
 
-    // Start the transport listening process (based on prototype methods)
-    await transport.start();
-    // *** END CHANGED LOGIC ***
+    // REMOVED: await transport.start(); // This line caused the "Transport already started" error
+    // *** END CORRECTED LOGIC ***
 
     console.log(`🚀 MCP server listening on port ${port} at path ${basePath}`);
 
