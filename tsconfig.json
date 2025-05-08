@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext", // Reverted to NodeNext
+    "module": "NodeNext", // Correct for ESM output
+    "moduleResolution": "NodeNext", // Correct for modern resolution
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,
@@ -15,15 +15,8 @@
     "sourceMap": true,
     "isolatedModules": true,
     "types": ["node"],
-    "resolveJsonModule": true,
-    "baseUrl": ".", // ADDED: Important for paths to work correctly
-    "paths": { // ADDED
-      "@modelcontextprotocol/sdk/server": ["./node_modules/@modelcontextprotocol/sdk/dist/server/index"], // Path to the .d.ts file (without extension)
-      "@modelcontextprotocol/sdk/server/http": ["./node_modules/@modelcontextprotocol/sdk/dist/server/http"],
-      "@modelcontextprotocol/sdk/types": ["./node_modules/@modelcontextprotocol/sdk/dist/types/index"]
-      // If the types are directly in, e.g., dist/types.d.ts, then use:
-      // "@modelcontextprotocol/sdk/types": ["./node_modules/@modelcontextprotocol/sdk/dist/types"]
-    }
+    "resolveJsonModule": true
+    // Removed baseUrl and paths
   },
   "include": ["src/**/*"],
   "exclude": [
