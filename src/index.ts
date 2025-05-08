@@ -1,64 +1,106 @@
-{
-  "name": "opengov-mcp-server",
-  "version": "0.1.1",
-  "description": "MCP server that enables a client, such as Claude Desktop, to access open government data through Socrata APIs",
-  "private": false,
-  "type": "module",
-  "engines": {
-    "node": ">=18.0.0"
+#!/usr/bin/env node
+
+// import 'dotenv/config'; // Ensure this is removed or commented out
+
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'; // Using Streamable based on previous step
+import {
+  Tool,
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
+
+import {
+  SOCRATA_TOOLS,
+  handleSocrataTool,
+} from './tools/socrata-tools.js';
+import { getPortalInfo, PortalInfo } from './utils/portal-info.js';
+
+// 1) Initialize the MCP server
+const server = new Server(
+  {
+    name: 'opengov-mcp-server',
+    version: '0.1.1',
   },
-  "main": "./dist/server.js",
-  "bin": {
-    "opengov-mcp-server": "./dist/server.js"
-  },
-  "scripts": {
-    "clean": "rm -rf dist",
-    "build": "npm run clean && esbuild src/index.ts --bundle --outfile=dist/server.js --platform=node --format=esm --target=node18 --sourcemap",
-    "start": "node ./dist/server.js"
-  },
-  "keywords": [
-    "anthropic",
-    "claude-desktop",
-    "claude",
-    "data",
-    "government",
-    "mcp",
-    "model-context-protocol",
-    "open-government",
-    "opendata",
-    "opengov",
-    "socrata"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/npstorey/opengov-mcp-server"
-  },
-  "author": "Scott Robbin <scott@robbin.co>",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/npstorey/opengov-mcp-server/issues"
-  },
-  "homepage": "https://github.com/npstorey/opengov-mcp-server#readme",
-  "files": [
-    "dist/server.js",
-    "dist/server.js.map",
-    "LICENSE",
-    "README.md"
-  ],
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "latest",
-    "axios": "^1.8.4"
-  },
-  "devDependencies": {
-    "typescript": "^5.8.2",
-    "@types/node": "^18.0.0",
-    "@types/axios": "^0.14.0",
-    "@typescript-eslint/eslint-plugin": "^8.29.0",
-    "@typescript-eslint/parser": "^8.29.0",
-    "eslint": "^9.23.0",
-    "prettier": "^3.5.3",
-    "shx": "^0.4.0",
-    "vitest": "^3.1.1",
-    "esbuild": "^0.20.0"
+  {
+    capabilities: {
+      tools: {},
+      logging: {},
+    },
+  }
+);
+
+// 2) Handle incoming tool‐calls (JSON-RPC)
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name, arguments: args } = request.params;
+  try {
+    server.sendLoggingMessage({
+      level: 'info',
+      data: { message: `Handling tool: ${name}`, tool: name, args },
+    });
+
+    let result: unknown;
+    if (name === 'get_data') {
+      result = await handleSocrataTool(args || {});
+    } else {
+      throw new Error(`Unknown tool: ${name}`);
+    }
+
+    server.sendLoggingMessage({
+      level: 'info',
+      data: { message: `Success: ${name}`, size: JSON.stringify(result).length },
+    });
+
+    return { content: [{ type: 'text', text: JSON.stringify(result) }], isError: false };
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    server.sendLoggingMessage({
+      level: 'error',
+      data: { message: `Error: ${errorMessage}`, tool: name, args },
+    });
+    return { content: [{ type: 'text', text: `Error: ${errorMessage}` }], isError: true };
+  }
+});
+
+// 3) Enhance tool list with portal info
+function enhanceToolsWithPortalInfo(tools: Tool[], portalInfo: PortalInfo): Tool[] {
+  return tools.map((tool) => ({
+    ...tool,
+    description: `[${portalInfo.title}] ${tool.description}`,
+  }));
+}
+
+// 4) Bootstrap and start HTTP transport
+async function runServer() {
+  try {
+    // Fetch portal metadata
+    const portalInfo = await getPortalInfo();
+    const enhancedTools = enhanceToolsWithPortalInfo(SOCRATA_TOOLS, portalInfo);
+
+    // Serve tool list
+    server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: enhancedTools }));
+
+    // Bind to Render’s port
+    const port = Number(process.env.PORT) || 8000;
+
+    // Use the transport class from the documentation
+    const transport = new StreamableHTTPServerTransport({
+       host: '0.0.0.0',
+       port,
+       basePath: '/mcp',
+       // sessionIdGenerator: undefined, // Use if needed for stateless mode
+    });
+
+    await transport.connect(server);
+    console.log(`🚀 MCP server listening on port ${port}`);
+
+  } catch (err) {
+    console.error('Fatal error starting server:', err);
+    process.exit(1);
   }
 }
+
+runServer().catch((err) => {
+  console.error('Uncaught initialization error:', err);
+  process.exit(1);
+});
