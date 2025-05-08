@@ -16,6 +16,8 @@ import {
 } from './tools/socrata-tools.js';
 import { getPortalInfo, PortalInfo } from './utils/portal-info.js';
 
+// --- Rest of file identical ---
+// ... (ensure StreamableHTTPServerTransport is used in runServer) ...
 // 1) Initialize the MCP server
 const server = new Server(
   {
