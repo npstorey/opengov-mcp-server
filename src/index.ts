@@ -58,7 +58,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       resultSize = JSON.stringify(result).length;
     } catch (stringifyError) {
       server.sendLoggingMessage({
-        // Corrected log level from 'warn' to 'error'
         level: 'error',
         data: { message: `Could not stringify result for tool: ${name}`, tool: name, args, error: stringifyError },
       });
@@ -123,9 +122,23 @@ async function runServer() {
        // sessionIdGenerator: undefined, // Use if needed for stateless mode
     });
 
+    // *** START DEBUG LOGGING ***
+    console.log('--- Inspecting transport object ---');
+    // Log the whole object (might be large/complex)
+    console.log(`transport object:`, transport);
+    // Specifically check the type of the 'connect' property
+    console.log(`typeof transport.connect:`, typeof transport?.connect);
+    // List methods available on the object's prototype if possible
+    if (transport && typeof transport === 'object' && Object.getPrototypeOf(transport)) {
+      console.log(`Methods on prototype:`, Object.getOwnPropertyNames(Object.getPrototypeOf(transport)));
+    }
+    console.log('--- End Inspection ---');
+    // *** END DEBUG LOGGING ***
+
+
     // Connect the transport to the server logic
+    // This is the line that previously failed (dist/index.js:102 corresponds roughly here)
     await transport.connect(server);
-    // Corrected console log: Removed transport.basePath access
     console.log(`🚀 MCP server listening on port ${port} at path ${basePath}`);
 
   } catch (err) {
