@@ -21,7 +21,6 @@ import { getPortalInfo, PortalInfo } from './utils/portal-info.js';
 const server = new Server(
   {
     name: 'opengov-mcp-server',
-    // Update version if needed, matching package.json
     version: '0.1.1',
   },
   {
@@ -34,7 +33,6 @@ const server = new Server(
 
 // 2) Handle incoming tool‐calls (JSON-RPC)
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  // Default args to an empty object if undefined or null
   const args = request.params.arguments || {};
   const { name } = request.params;
 
@@ -46,22 +44,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     let result: unknown;
     if (name === 'get_data') {
-      // Pass the potentially defaulted args object
       result = await handleSocrataTool(args);
     } else {
       throw new Error(`Unknown tool: ${name}`);
     }
 
-    // Determine result size safely
     let resultSize = 0;
     try {
       resultSize = JSON.stringify(result).length;
     } catch (stringifyError) {
       server.sendLoggingMessage({
-        level: 'error',
+        level: 'error', // Changed from 'warn'
         data: { message: `Could not stringify result for tool: ${name}`, tool: name, args, error: stringifyError },
       });
-      // Handle potentially circular structures or other stringify issues
       result = { stringifyError: 'Could not serialize result' };
       resultSize = JSON.stringify(result).length;
     }
@@ -71,7 +66,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       data: { message: `Tool call success: ${name}`, tool: name, resultSize },
     });
 
-    // Return standard MCP response
     return { content: [{ type: 'text', text: JSON.stringify(result) }], isError: false };
 
   } catch (err) {
@@ -80,7 +74,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       level: 'error',
       data: { message: `Tool call error: ${errorMessage}`, tool: name, args, error: err },
     });
-    // Return standard MCP error response
     return { content: [{ type: 'text', text: `Error: ${errorMessage}` }], isError: true };
   }
 });
@@ -96,60 +89,42 @@ function enhanceToolsWithPortalInfo(tools: Tool[], portalInfo: PortalInfo): Tool
 // 4) Bootstrap and start HTTP transport
 async function runServer() {
   try {
-    // Fetch portal metadata
     const portalInfo = await getPortalInfo();
     const enhancedTools = enhanceToolsWithPortalInfo(SOCRATA_TOOLS, portalInfo);
 
-    // Serve tool list - CORRECTED HANDLER
     server.setRequestHandler(ListToolsRequestSchema, async () => {
-      // Construct the standard MCP response structure for ListTools
-      // The client expects the list of tools to be JSON stringified within the 'content'
       return {
         content: [{ type: 'text', text: JSON.stringify({ tools: enhancedTools }) }],
         isError: false
       };
-    }); // <-- End of corrected setRequestHandler for ListTools
-
-    // Bind to Render’s port or default
-    const port = Number(process.env.PORT) || 8000;
-    const basePath = '/mcp'; // Store basePath for logging
-
-    // Use the transport class from the documentation
-    const transport = new StreamableHTTPServerTransport({
-       host: '0.0.0.0', // Listen on all interfaces for container environments
-       port,
-       basePath: basePath, // Set base path if needed, otherwise '/'
-       // sessionIdGenerator: undefined, // Use if needed for stateless mode
     });
 
-    // *** START DEBUG LOGGING ***
-    console.log('--- Inspecting transport object ---');
-    // Log the whole object (might be large/complex)
-    console.log(`transport object:`, transport);
-    // Specifically check the type of the 'connect' property
-    console.log(`typeof transport.connect:`, typeof transport?.connect);
-    // List methods available on the object's prototype if possible
-    if (transport && typeof transport === 'object' && Object.getPrototypeOf(transport)) {
-      console.log(`Methods on prototype:`, Object.getOwnPropertyNames(Object.getPrototypeOf(transport)));
-    }
-    console.log('--- End Inspection ---');
-    // *** END DEBUG LOGGING ***
+    const port = Number(process.env.PORT) || 8000;
+    const basePath = '/mcp';
 
+    const transport = new StreamableHTTPServerTransport({
+       host: '0.0.0.0',
+       port,
+       basePath: basePath,
+    });
 
-    // Connect the transport to the server logic
-    // This is the line that previously failed (dist/index.js:102 corresponds roughly here)
-    await transport.connect(server);
+    // *** CHANGED CONNECTION LOGIC ***
+    // Connect the server TO the transport
+    await server.connect(transport);
+
+    // Start the transport listening process (based on prototype methods)
+    await transport.start();
+    // *** END CHANGED LOGIC ***
+
     console.log(`🚀 MCP server listening on port ${port} at path ${basePath}`);
 
   } catch (err) {
-    // Log fatal startup errors
     console.error('Fatal error starting server:', err);
-    process.exit(1); // Exit if server cannot start
+    process.exit(1);
   }
 }
 
-// Run the server and catch top-level errors during initialization
 runServer().catch((err) => {
   console.error('Uncaught initialization error:', err);
-  process.exit(1); // Exit if initialization fails
+  process.exit(1);
 });
