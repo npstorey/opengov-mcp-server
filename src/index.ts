@@ -1,129 +1,44 @@
 #!/usr/bin/env node
 
-// Removed: import 'dotenv/config';
+import * as http from 'http';
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js'; // Suffix needed
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'; // Suffix needed
-import {
-  // Explicitly import Tool type for use in function signatures
-  type Tool,
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js'; // Suffix needed
+// Get the port from Render's environment variable, default to 8080 locally
+const port = Number(process.env.PORT) || 8080;
+// Define the host to listen on all interfaces
+const host = '0.0.0.0';
 
-import {
-  SOCRATA_TOOLS,
-  handleSocrataTool,
-} from './tools/socrata-tools.js';
-import { getPortalInfo, PortalInfo } from './utils/portal-info.js';
+// Create a simple HTTP request handler
+const requestListener = function (req: http.IncomingMessage, res: http.ServerResponse) {
+  console.log(`Received request: ${req.method} ${req.url}`);
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Render Health Check OK\n');
+};
 
-// 1) Initialize the MCP server
-const server = new Server(
-  {
-    name: 'opengov-mcp-server',
-    version: '0.1.1',
-  },
-  {
-    capabilities: {
-      tools: {},
-      logging: {},
-    },
-  }
-);
+// Create the HTTP server
+const server = http.createServer(requestListener);
 
-// 2) Handle incoming tool‐calls (JSON-RPC)
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const args = request.params.arguments || {};
-  const { name } = request.params;
-
-  try {
-    server.sendLoggingMessage({
-      level: 'info',
-      data: { message: `Handling tool call: ${name}`, tool: name, args },
-    });
-
-    let result: unknown;
-    if (name === 'get_data') {
-      result = await handleSocrataTool(args);
-    } else {
-      throw new Error(`Unknown tool: ${name}`);
-    }
-
-    let resultSize = 0;
-    try {
-      resultSize = JSON.stringify(result).length;
-    } catch (stringifyError) {
-      server.sendLoggingMessage({
-        level: 'error',
-        data: { message: `Could not stringify result for tool: ${name}`, tool: name, args, error: stringifyError },
-      });
-      result = { stringifyError: 'Could not serialize result' };
-      resultSize = JSON.stringify(result).length;
-    }
-
-    server.sendLoggingMessage({
-      level: 'info',
-      data: { message: `Tool call success: ${name}`, tool: name, resultSize },
-    });
-
-    return { content: [{ type: 'text', text: JSON.stringify(result) }], isError: false };
-
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    server.sendLoggingMessage({
-      level: 'error',
-      data: { message: `Tool call error: ${errorMessage}`, tool: name, args, error: err },
-    });
-    return { content: [{ type: 'text', text: `Error: ${errorMessage}` }], isError: true };
-  }
+// Start listening
+server.listen(port, host, () => {
+  // This is the crucial log message
+  console.log(`🚀 Basic HTTP server listening on ${host}:${port}`);
 });
 
-// 3) Enhance tool list with portal info
-function enhanceToolsWithPortalInfo(tools: Tool[], portalInfo: PortalInfo): Tool[] {
-  return tools.map((tool) => ({
-    ...tool,
-    description: `[${portalInfo.title}] ${tool.description}`,
-  }));
-}
+// Handle server errors
+server.on('error', (err) => {
+  console.error('Server error:', err);
+  process.exit(1); // Exit on error
+});
 
-// 4) Bootstrap and start HTTP transport
-async function runServer() {
-  try {
-    const portalInfo = await getPortalInfo();
-    const enhancedTools = enhanceToolsWithPortalInfo(SOCRATA_TOOLS, portalInfo);
+console.log('Attempting to start basic HTTP server...');
 
-    server.setRequestHandler(ListToolsRequestSchema, async () => {
-      return {
-        content: [{ type: 'text', text: JSON.stringify({ tools: enhancedTools }) }],
-        isError: false
-      };
+// Keep the process alive (useful for simple examples, might not be strictly needed on Render)
+// process.stdin.resume(); // You can comment this out if preferred
+
+// Graceful shutdown (optional but good practice)
+process.on('SIGTERM', () => {
+    console.log('SIGTERM signal received: closing HTTP server');
+    server.close(() => {
+        console.log('HTTP server closed');
+        process.exit(0);
     });
-
-    const port = Number(process.env.PORT) || 8000;
-    const basePath = '/mcp';
-
-    const transport = new StreamableHTTPServerTransport({
-       host: '0.0.0.0',
-       port,
-       basePath: basePath,
-    });
-
-    // *** REVERTED CONNECTION LOGIC ***
-    // Connect the server TO the transport. This should implicitly start it.
-    await server.connect(transport);
-
-    // REMOVED explicit transport.start() call
-    // *** END REVERTED LOGIC ***
-
-    console.log(`🚀 MCP server listening on port ${port} at path ${basePath}`);
-
-  } catch (err) {
-    console.error('Fatal error starting server:', err);
-    process.exit(1);
-  }
-}
-
-runServer().catch((err) => {
-  console.error('Uncaught initialization error:', err);
-  process.exit(1);
 });
