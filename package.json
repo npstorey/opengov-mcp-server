@@ -48,7 +48,7 @@
     "README.md"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.10.2",
+    "@modelcontextprotocol/sdk": "1.8.0",
     "axios": "^1.8.4"
   },
   "devDependencies": {
