@@ -19,21 +19,31 @@ declare module '@modelcontextprotocol/sdk/server/index.js' {
   type McpServerTransport = any; // Replace 'any' if a base type is known/exported
 
   export class Server {
-    constructor(meta: { name: string; version: string }, capabilities: { capabilities: any });
+    constructor(meta: { name: string; version: string }, capabilities?: { capabilities: any });
     setRequestHandler(
       schema: any, // Ideally, import specific RequestSchema types if available or define them
       handler: (request: { params: any }) => Promise<{ content: Array<{type: string, text: string}>; isError: boolean } | { tools: any[] }>
     ): void;
     sendLoggingMessage(log: { level: 'info' | 'error'; data: any }): void;
     connect(transport: McpServerTransport): Promise<void>;
+    close(): Promise<void>;
+    tool?(name: string, paramSchema: any, handler: (params: any) => Promise<any>): any;
+    resource?(name: string, template: any, handler: (uri: any, params: any) => Promise<any>): void;
+    prompt?(name: string, paramSchema: any, handler: (params: any) => Promise<any>): void;
   }
   // Add any other exports from '.../server/index.js' that you might use.
 }
 
-declare module '@modelcontextprotocol/sdk/server/sse.js' {
-  export class SSEServerTransport {
-    constructor(postMessagesUrl: string, res: any); // 'res' is an Express response object
-    handlePostMessage(req: any, res: any): void; // 'req', 'res' are Express request/response
+declare module '@modelcontextprotocol/sdk/server/streamableHttp.js' {
+  export class StreamableHTTPServerTransport {
+    constructor(options?: {
+      sessionIdGenerator?: () => string;
+      onsessioninitialized?: (sessionId: string) => void;
+    });
+    handleRequest(req: any, res: any, body?: any): Promise<void>;
+    close(): Promise<void>;
+    onclose?: (() => void) | null;
+    sessionId?: string;
   }
 }
 
@@ -50,5 +60,6 @@ declare module '@modelcontextprotocol/sdk/types.js' {
   }
   export const CallToolRequestSchema: any; // Or a more specific type based on SDK
   export const ListToolsRequestSchema: any; // Or a more specific type
+  export function isInitializeRequest(body: any): boolean;
   // Add any other types/exports from '.../types.js'.
 }
