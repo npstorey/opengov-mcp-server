@@ -128,14 +128,15 @@ async function startApp() {
 
     app.listen(port, '0.0.0.0', () => {
       console.log(`🚀 MCP server (using Express + SSE) listening on port ${port}. SSE at ${ssePath}, Messages at ${messagesPath}`);
-      mcpServer.sendLoggingMessage({
-        level: 'info',
-        data: {
-          message: `OpenGov MCP Server (Express+SSE) started for data portal: ${portalInfo.title}`,
-          portalInfo,
-          timestamp: new Date().toISOString(),
-        },
-      });
+      // Removed logging message for startup
+      // mcpServer.sendLoggingMessage({
+      //   level: 'info',
+      //   data: {
+      //     message: `OpenGov MCP Server (Express+SSE) started for data portal: ${portalInfo.title}`,
+      //     portalInfo,
+      //     timestamp: new Date().toISOString(),
+      //   },
+      // });
     });
 
   } catch (err) {
