@@ -22,29 +22,24 @@ declare module '@modelcontextprotocol/sdk/server/index.js' {
     constructor(meta: { name: string; version: string }, capabilities: { capabilities: any });
     setRequestHandler(
       schema: any, // Ideally, import specific RequestSchema types if available or define them
-      handler: (request: { params: any }) => Promise<{ content: Array<{type: string, text: string}>; isError: boolean }>
+      handler: (request: { params: any }) => Promise<{ content: Array<{type: string, text: string}>; isError: boolean } | { tools: any[] }>
     ): void;
     sendLoggingMessage(log: { level: 'info' | 'error'; data: any }): void;
-    // ADDED: connect method declaration based on likely usage pattern
     connect(transport: McpServerTransport): Promise<void>;
   }
   // Add any other exports from '.../server/index.js' that you might use.
 }
 
 declare module '@modelcontextprotocol/sdk/server/streamableHttp.js' {
-  // We know connect doesn't exist here now, so we don't declare it.
   export class StreamableHTTPServerTransport {
     constructor(options: {
       host: string;
       port: number;
       basePath: string;
-      sessionIdGenerator?: () => string; // if you were to use it
+      sessionIdGenerator?: () => string; // Optional, if you were to use it
     });
-    // Declare the 'start' method which exists on the prototype
-    start(): Promise<void>;
-    // Declare 'close' if needed
-    // close(): Promise<void>;
-    // Note: 'send' is also available but usually called internally by the Server
+    // As per request, only constructor is declared for SDK 1.8.0 context
+    // where server.connect(transport) is used instead of transport.start()
   }
   // Add any other exports from '.../server/streamableHttp.js'.
 }
