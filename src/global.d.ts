@@ -36,9 +36,8 @@ declare module '@modelcontextprotocol/sdk/server/index.js' {
 }
 
 declare module '@modelcontextprotocol/sdk/server/sse.js' {
-  // Assuming req and res are Express types, but using 'any' for a generic shim
-  type ExpressRequest = any; 
-  type ExpressResponse = any;
+  type ExpressRequest = import('express').Request;
+  type ExpressResponse = import('express').Response;
 
   export class SSEServerTransport {
     constructor(postMessagesUrl: string, res: ExpressResponse);

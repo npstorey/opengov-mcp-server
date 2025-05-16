@@ -134,6 +134,7 @@ async function startApp() {
       }
       
       activeTransport = new SSEServerTransport(messagesPath, res);
+      console.log('[MCP Server] activeTransport created. Is SSEServerTransport instance:', activeTransport instanceof SSEServerTransport);
       
       // Add error handler for activeTransport
       try {
