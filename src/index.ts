@@ -117,11 +117,17 @@ async function startApp() {
     let activeTransport: SSEServerTransport | null = null;
 
     app.get(ssePath, async (req: Request, res: Response) => {
-      console.log(`[MCP Server] GET ${ssePath}: New SSE connection request`);
+      console.log(`[MCP Server] GET ${ssePath}: New SSE connection request from ${req.ip}`);
+      // Simplified: assume one active transport for now. For multiple clients, this needs more robust handling.
+      if (activeTransport) {
+        console.log('[MCP Server] An existing SSE transport was active. It will be overridden.');
+        // Consider if activeTransport.close() is needed/available if overwriting
+      }
+      
       activeTransport = new SSEServerTransport(messagesPath, res);
       try {
         await mcpServer.connect(activeTransport);
-        console.log(`[MCP Server] SSE transport connected for GET ${ssePath}`);
+        console.log(`[MCP Server] SSE transport connected and mcpServer.connect() called for GET ${ssePath}.`);
       } catch (connectError) {
         console.error(`[MCP Server] Error connecting MCP server to SSE transport: `, connectError);
         if (!res.headersSent) {
@@ -131,9 +137,11 @@ async function startApp() {
       }
       
       req.on('close', () => {
-        console.log(`[MCP Server] GET ${ssePath}: SSE connection closed by client`);
-        // activeTransport?.close(); // Consider if SSEServerTransport has a close method to call
-        activeTransport = null;
+        console.log(`[MCP Server] GET ${ssePath}: SSE connection closed by client (${req.ip}). Clearing activeTransport.`);
+        // if (activeTransport && typeof activeTransport.close === 'function') {
+        //   activeTransport.close(); // If a close method exists on the transport
+        // }
+        activeTransport = null; 
       });
     });
 
@@ -142,7 +150,16 @@ async function startApp() {
       console.log('[MCP Server] Request Body for POST:', JSON.stringify(req.body, null, 2)); 
 
       if (activeTransport) {
-        activeTransport.handlePostMessage(req, res);
+        try {
+          console.log('[MCP Server] Calling activeTransport.handlePostMessage...');
+          activeTransport.handlePostMessage(req, res); // This is often synchronous for SSE message routing
+          console.log('[MCP Server] Returned from activeTransport.handlePostMessage.');
+        } catch (e) {
+          console.error('[MCP Server] Error synchronously thrown by activeTransport.handlePostMessage:', e);
+          if (!res.headersSent) {
+            res.status(500).send('Error processing message');
+          }
+        }
       } else {
         console.error(`[MCP Server] POST ${messagesPath}: No active SSE transport to handle message`);
         if (!res.headersSent) {
