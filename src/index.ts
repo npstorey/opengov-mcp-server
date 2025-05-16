@@ -30,6 +30,15 @@ const mcpServer = new Server(
   }
 );
 
+// Add global error handler for mcpServer
+if (typeof (mcpServer as any).onError === 'function') { // Type guard
+  (mcpServer as any).onError((error: Error) => {
+    console.error('[MCP Server Global Error]', error);
+  });
+} else {
+  console.log('[MCP Server] mcpServer.onError method not found, skipping global error handler setup.');
+}
+
 mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
   const args = request.params.arguments || {};
   const { name } = request.params;
@@ -125,6 +134,16 @@ async function startApp() {
       }
       
       activeTransport = new SSEServerTransport(messagesPath, res);
+      
+      // Add error handler for activeTransport
+      try {
+        (activeTransport as any).onerror = (error: Error) => {
+          console.error('[MCP Transport Error]', error);
+        };
+      } catch (err) {
+        console.log('[MCP Server] Could not set activeTransport.onerror handler:', err);
+      }
+
       try {
         await mcpServer.connect(activeTransport);
         console.log(`[MCP Server] SSE transport connected and mcpServer.connect() called for GET ${ssePath}.`);
