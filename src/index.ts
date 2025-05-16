@@ -77,13 +77,31 @@ function enhanceToolsWithPortalInfo(tools: Tool[], portalInfo: PortalInfo): Tool
 
 async function startApp() {
   try {
-    const portalInfo = await getPortalInfo();
-    const enhancedTools = enhanceToolsWithPortalInfo(SOCRATA_TOOLS, portalInfo);
-
     mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
-      return {
-        tools: enhancedTools 
-      };
+      console.log('[MCP Server] ListToolsRequestSchema handler: Fired');
+      try {
+        const portalInfo = await getPortalInfo();
+        console.log('[MCP Server] ListToolsRequestSchema handler: Got portalInfo.title:', portalInfo.title);
+        
+        const enhancedTools = enhanceToolsWithPortalInfo(SOCRATA_TOOLS, portalInfo);
+        console.log('[MCP Server] ListToolsRequestSchema handler: Enhanced tools created, count:', enhancedTools.length);
+        // console.log('[MCP Server] ListToolsRequestSchema handler: Tools being sent:', JSON.stringify({ tools: enhancedTools })); // Keep this commented for now, too verbose
+
+        return {
+          tools: enhancedTools
+        };
+      } catch (error) {
+        console.error('[MCP Server] ListToolsRequestSchema handler: ERROR occurred:', error);
+        // Return a single, super-simple fallback tool if there was an error fetching/enhancing
+        const fallbackTool: Tool = {
+          name: "error_fallback_tool",
+          description: "A fallback tool due to an error generating the full list.",
+          inputSchema: { type: "object", properties: { q: { type: "string" } } }
+        };
+        return {
+          tools: [fallbackTool]
+        };
+      }
     });
 
     const app = express();
