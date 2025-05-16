@@ -25,7 +25,6 @@ const mcpServer = new Server(
   {
     capabilities: {
       tools: {}, // Server will automatically declare tools capability if setRequestHandler(ListToolsRequestSchema,...) is used
-      logging: {},
     },
   }
 );
