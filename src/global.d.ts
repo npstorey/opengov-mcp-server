@@ -16,13 +16,14 @@ declare namespace NodeJS {
 
 declare module '@modelcontextprotocol/sdk/server/index.js' {
   // Define the transport type vaguely here for the method signature
-  type McpServerTransport = any; // Replace 'any' if a base type is known/exported
+  type McpServerTransport = any; // Generic transport type
 
   export class Server {
-    constructor(meta: { name: string; version: string }, capabilities?: { capabilities: any });
+    constructor(meta: { name: string; version: string }, capabilities: { capabilities: any });
     setRequestHandler(
-      schema: any, // Ideally, import specific RequestSchema types if available or define them
-      handler: (request: { params: any }) => Promise<{ content: Array<{type: string, text: string}>; isError: boolean } | { tools: any[] }>
+      schema: any,
+      // Allow both a direct {tools: ...} or the wrapped content response for flexibility
+      handler: (request: { params: any }) => Promise<{ tools: any[] } | { content: Array<{type: string, text: string}>; isError: boolean }>
     ): void;
     sendLoggingMessage(log: { level: 'info' | 'error'; data: any }): void;
     connect(transport: McpServerTransport): Promise<void>;
@@ -34,16 +35,16 @@ declare module '@modelcontextprotocol/sdk/server/index.js' {
   // Add any other exports from '.../server/index.js' that you might use.
 }
 
-declare module '@modelcontextprotocol/sdk/server/streamableHttp.js' {
-  export class StreamableHTTPServerTransport {
-    constructor(options?: {
-      sessionIdGenerator?: () => string;
-      onsessioninitialized?: (sessionId: string) => void;
-    });
-    handleRequest(req: any, res: any, body?: any): Promise<void>;
-    close(): Promise<void>;
-    onclose?: (() => void) | null;
-    sessionId?: string;
+declare module '@modelcontextprotocol/sdk/server/sse.js' {
+  // Assuming req and res are Express types, but using 'any' for a generic shim
+  type ExpressRequest = any; 
+  type ExpressResponse = any;
+
+  export class SSEServerTransport {
+    constructor(postMessagesUrl: string, res: ExpressResponse);
+    handlePostMessage(req: ExpressRequest, res: ExpressResponse): void;
+    // Add other methods like 'close' if they are documented and needed
+    // close?(): void; 
   }
 }
 
