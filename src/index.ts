@@ -82,8 +82,7 @@ async function startApp() {
 
     mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
-        content: [{ type: 'text', text: JSON.stringify({ tools: enhancedTools }) }],
-        isError: false
+        tools: enhancedTools 
       };
     });
 
