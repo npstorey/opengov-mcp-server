@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import {
   type Tool,
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import express from 'express';
 
 import {
   SOCRATA_TOOLS,
@@ -14,7 +15,7 @@ import {
 } from './tools/socrata-tools.js';
 import { getPortalInfo, PortalInfo } from './utils/portal-info.js';
 
-const server = new Server(
+const mcpServer = new Server(
   {
     name: 'opengov-mcp-server',
     version: '0.1.1',
@@ -27,11 +28,11 @@ const server = new Server(
   }
 );
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
+mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
   const args = request.params.arguments || {};
   const { name } = request.params;
   try {
-    server.sendLoggingMessage({
+    mcpServer.sendLoggingMessage({
       level: 'info',
       data: { message: `Handling tool call: ${name}`, tool: name, args },
     });
@@ -45,21 +46,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     try {
       resultSize = JSON.stringify(result).length;
     } catch (stringifyError) {
-      server.sendLoggingMessage({
+      mcpServer.sendLoggingMessage({
         level: 'error',
         data: { message: `Could not stringify result for tool: ${name}`, tool: name, args, error: stringifyError },
       });
       result = { stringifyError: 'Could not serialize result' };
       resultSize = JSON.stringify(result).length;
     }
-    server.sendLoggingMessage({
+    mcpServer.sendLoggingMessage({
       level: 'info',
       data: { message: `Tool call success: ${name}`, tool: name, resultSize },
     });
     return { content: [{ type: 'text', text: JSON.stringify(result) }], isError: false };
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
-    server.sendLoggingMessage({
+    mcpServer.sendLoggingMessage({
       level: 'error',
       data: { message: `Tool call error: ${errorMessage}`, tool: name, args, error: err },
     });
@@ -74,38 +75,76 @@ function enhanceToolsWithPortalInfo(tools: Tool[], portalInfo: PortalInfo): Tool
   }));
 }
 
-async function runServer() {
+async function startApp() {
   try {
     const portalInfo = await getPortalInfo();
     const enhancedTools = enhanceToolsWithPortalInfo(SOCRATA_TOOLS, portalInfo);
 
-    server.setRequestHandler(ListToolsRequestSchema, async () => {
+    mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
         content: [{ type: 'text', text: JSON.stringify({ tools: enhancedTools }) }],
         isError: false
       };
     });
 
-    const port = Number(process.env.PORT) || 8000;
-    const basePath = '/mcp';
+    const app = express();
+    app.use(express.json());
 
-    const transport = new StreamableHTTPServerTransport({
-       host: '0.0.0.0',
-       port,
-       basePath: basePath,
+    const port = Number(process.env.PORT) || 8000;
+    const ssePath = '/mcp/sse';
+    const messagesPath = '/mcp/messages';
+
+    let activeTransport: SSEServerTransport | null = null;
+
+    app.get(ssePath, async (req, res) => {
+      console.log(`GET ${ssePath}: New SSE connection request`);
+      if (activeTransport) {
+        // activeTransport.close(); // Need to check if SSEServerTransport has a close method
+      }
+      
+      activeTransport = new SSEServerTransport(messagesPath, res);
+      await mcpServer.connect(activeTransport);
+      
+      console.log(`SSE transport connected for GET ${ssePath}`);
+      req.on('close', () => {
+        console.log(`GET ${ssePath}: SSE connection closed by client`);
+        activeTransport = null;
+      });
     });
 
-    await server.connect(transport);
+    app.post(messagesPath, (req, res) => {
+      console.log(`POST ${messagesPath}: Received message`);
+      if (activeTransport) {
+        activeTransport.handlePostMessage(req, res);
+      } else {
+        console.error(`POST ${messagesPath}: No active SSE transport to handle message`);
+        res.status(500).send('No active SSE transport');
+      }
+    });
+    
+    app.get('/', (req, res) => {
+      res.status(200).send('OpenGov MCP Server is running. MCP endpoint at /mcp/sse (GET for SSE) and /mcp/messages (POST for client messages).');
+    });
 
-    console.log(`🚀 MCP server listening on port ${port} at path ${basePath}`);
+    app.listen(port, '0.0.0.0', () => {
+      console.log(`🚀 MCP server (using Express + SSE) listening on port ${port}. SSE at ${ssePath}, Messages at ${messagesPath}`);
+      mcpServer.sendLoggingMessage({
+        level: 'info',
+        data: {
+          message: `OpenGov MCP Server (Express+SSE) started for data portal: ${portalInfo.title}`,
+          portalInfo,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    });
 
   } catch (err) {
-    console.error('Fatal error starting server:', err);
+    console.error('Fatal error starting Express app:', err);
     process.exit(1);
   }
 }
 
-runServer().catch((err) => {
-  console.error('Uncaught initialization error:', err);
+startApp().catch((err) => {
+  console.error('Uncaught initialization error for Express app:', err);
   process.exit(1);
 });

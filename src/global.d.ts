@@ -30,18 +30,11 @@ declare module '@modelcontextprotocol/sdk/server/index.js' {
   // Add any other exports from '.../server/index.js' that you might use.
 }
 
-declare module '@modelcontextprotocol/sdk/server/streamableHttp.js' {
-  export class StreamableHTTPServerTransport {
-    constructor(options: {
-      host: string;
-      port: number;
-      basePath: string;
-      sessionIdGenerator?: () => string; // Optional, if you were to use it
-    });
-    // As per request, only constructor is declared for SDK 1.8.0 context
-    // where server.connect(transport) is used instead of transport.start()
+declare module '@modelcontextprotocol/sdk/server/sse.js' {
+  export class SSEServerTransport {
+    constructor(postMessagesUrl: string, res: any); // 'res' is an Express response object
+    handlePostMessage(req: any, res: any): void; // 'req', 'res' are Express request/response
   }
-  // Add any other exports from '.../server/streamableHttp.js'.
 }
 
 declare module '@modelcontextprotocol/sdk/types.js' {
