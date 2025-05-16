@@ -92,29 +92,19 @@ async function startApp() {
     // to ensure fresh data if DATA_PORTAL_URL changes or for first load on Render.
 
     mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
-      console.log('[MCP Server] ListToolsRequestSchema handler: Fired');
-      try {
-        const portalInfo = await getPortalInfo();
-        console.log('[MCP Server] ListToolsRequestSchema handler: Got portalInfo.title:', portalInfo.title);
-        
-        // Assuming SOCRATA_TOOLS is an array containing UNIFIED_SOCRATA_TOOL
-        const enhancedTools = enhanceToolsWithPortalInfo(SOCRATA_TOOLS, portalInfo);
-        console.log('[MCP Server] ListToolsRequestSchema handler: Enhanced tools created, count:', enhancedTools.length);
-
-        return {
-          tools: enhancedTools
-        };
-      } catch (error) {
-        console.error('[MCP Server] ListToolsRequestSchema handler: ERROR occurred:', error);
-        const fallbackTool: Tool = {
-          name: "error_fallback_tool",
-          description: "A fallback tool due to an error generating the full list.",
-          inputSchema: { type: "object", properties: { q: { type: "string" } } }
-        };
-        return {
-          tools: [fallbackTool]
-        };
-      }
+      console.log('[MCP Server] ListToolsRequestSchema handler: Fired (SUPER SIMPLE FALLBACK)'); // Log that this simplified version is active
+      const veryMinimalTool: Tool = {
+        name: "ping", // Simple, common name
+        description: "A super simple ping tool to test connectivity.",
+        inputSchema: { 
+          type: "object", 
+          properties: {} // No parameters
+        }
+        // No annotations for maximum simplicity initially
+      };
+      return {
+        tools: [veryMinimalTool]
+      };
     });
 
     const app = express();
