@@ -2,71 +2,40 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
-import { z } from 'zod';
 import express from 'express';
 import type { Request, Response } from 'express'; // Import Express types for better type safety
 
-import {
-  handleSocrataTool,
-  UNIFIED_SOCRATA_TOOL, // Assuming this is the single tool object
-} from './tools/socrata-tools.js';
-
 async function createMcpServerInstance(): Promise<McpServer> {
-
-  const server = new McpServer(
-    { name: 'opengov-mcp-server', version: '0.1.1' },
-    { capabilities: { tools: {}, resources: {}, prompts: {} } }
+  console.log(
+    '[MCP Server Factory] Creating new McpServer instance (NO TOOLS REGISTERED TEST)'
   );
 
-  // Optional global error handler if available
-  if (typeof (server as any).onError === 'function') {
-    (server as any).onError((error: Error) => {
+  const serverInstance = new McpServer(
+    {
+      name: 'opengov-mcp-server',
+      version: '0.1.1',
+    },
+    {
+      capabilities: {
+        tools: {},
+      },
+    }
+  );
+
+  const serverWithErrorHandler = serverInstance as unknown as {
+    onError?: (error: Error) => void;
+  };
+  if (typeof serverWithErrorHandler.onError === 'function') {
+    serverWithErrorHandler.onError((error: Error) => {
       console.error('[MCP Server Global Error]', error);
     });
   }
 
-  // Simplified tool registration for debugging tool enablement
-  const simpleSchema = z
-    .object({
-      query: z.string().describe('A simple query string').optional(),
-    })
-    .strict();
-
-  (server as any).tool(
-    UNIFIED_SOCRATA_TOOL.name,
-    'A simple test tool for Socrata data.',
-    simpleSchema as any,
-    async (args: any) => {
-      console.log(
-        `[McpServer Tool 'get_data'] Called with simplified schema. Args:`,
-        args
-      );
-      try {
-        const result = await handleSocrataTool(args);
-        return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-      } catch (toolErr) {
-        console.error(
-          `[McpServer Tool 'get_data' with simplified schema] Error:`,
-          toolErr
-        );
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Error with simplified tool: ${
-                toolErr instanceof Error ? toolErr.message : String(toolErr)
-              }`,
-            },
-          ],
-          isError: true,
-        };
-      }
-    }
+  // NO mcpServer.tool(...) CALL HERE
+  console.log(
+    '[MCP Server Factory] McpServer instance created with no tools explicitly registered.'
   );
-
-  console.log('[MCP Server] Simplified tool registered');
-
-  return server;
+  return serverInstance;
 }
 
 const transports: Record<string, SSEServerTransport> = {};
@@ -85,7 +54,7 @@ async function startApp() {
 
       const mcpServer = await createMcpServerInstance();
       const transport = new SSEServerTransport(messagesPath, res);
-      const sessionId = (transport as any).sessionId as string;
+      const sessionId = transport.sessionId;
 
       transports[sessionId] = transport;
 
