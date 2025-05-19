@@ -71,8 +71,20 @@ async function startApp() {
       }
 
       req.on('close', () => {
-        console.log(`[MCP Server] SSE connection closed for session ${sessionId}`);
+        console.log(
+          `[MCP Server - SSE Close] SSE connection closing for session ${sessionId}...`
+        );
+        console.log(
+          `[MCP Server - SSE Close] Deleting transport for sessionId: ${sessionId}`
+        );
         delete transports[sessionId];
+        console.log(
+          `[MCP Server - SSE Close] Transport for session ${sessionId} successfully deleted.`
+        );
+        console.log(
+          `[MCP Server - SSE Close] Active transport keys after deletion: ${Object.keys(transports)}`
+        );
+        console.log(`[MCP Server] SSE connection closed for session ${sessionId}`);
       });
     });
 
