@@ -92,9 +92,7 @@ const mcpServer = new McpServer(
   },
   {
     capabilities: {
-      tools: {},
-      resources: {},
-      prompts: {},
+      tools: {}
     },
   }
 );
