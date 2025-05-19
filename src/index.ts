@@ -11,7 +11,7 @@ import type { Request, Response } from 'express'; // Import Express types for be
 
 import {
   handleSocrataTool,
-  UNIFIED_SOCRATA_TOOL, // Assuming this is the single tool object
+  UNIFIED_SOCRATA_TOOL,
 } from './tools/socrata-tools.js';
 import { getPortalInfo } from './utils/portal-info.js';
 
@@ -149,6 +149,15 @@ async function startApp() {
         delete transports[sessionId];
       });
     });
+    console.log('[MCP Server] Tool registered with description:', description);
+
+  /* ---------- Client messages (POST) ---------- */
+  app.post(messagesPath, async (req: Request, res: Response) => {
+    const sessionId = req.query.sessionId as string | undefined;
+    if (!sessionId) {
+      res.status(400).send('Missing sessionId');
+      return;
+    }
 
     app.post(messagesPath, (req: Request, res: Response) => {
       console.log(`[MCP Server] POST ${messagesPath}: Received message.`);
@@ -180,18 +189,34 @@ async function startApp() {
       res.status(200).send('OpenGov MCP Server is running. MCP endpoint at /mcp/sse (GET for SSE) and /mcp/messages (POST for client messages).');
     });
 
-    app.listen(port, '0.0.0.0', () => {
-      console.log(`🚀 MCP server (using Express + SSE) listening on port ${port}. SSE at ${ssePath}, Messages at ${messagesPath}`);
-    });
+    try {
+      await transport.handlePostMessage(req, res, req.body);
+    } catch (err) {
+      console.error(`[POST ${messagesPath}] handlePostMessage error`, err);
+      if (!res.headersSent) res.status(500).send('Error processing message');
+    }
+  });
 
-  } catch (err) {
-    console.error('Fatal error starting Express app:', err);
-    process.exit(1);
-  }
+  /* ---------- Health check ---------- */
+  app.get('/', (_req: Request, res: Response) =>
+    res
+      .status(200)
+      .send(
+        'OpenGov MCP Server is running. SSE: GET /mcp/sse, Messages: POST /mcp/messages',
+      ),
+  );
+
+  /* ---------- Start server ---------- */
+  app.listen(port, '0.0.0.0', () => {
+    console.log(`🚀 Server listening on port ${port}`);
+  });
 }
 
+/* -------------------------------------------------------------------------- */
+/* Entrypoint                                                                 */
+/* -------------------------------------------------------------------------- */
 startApp().catch((err) => {
-  console.error('Uncaught initialization error for Express app:', err);
+  console.error('[Fatal] Uncaught error during startup', err);
   process.exit(1);
 });
 
