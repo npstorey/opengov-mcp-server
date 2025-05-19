@@ -23,7 +23,7 @@ async function createMcpServerInstance(): Promise<McpServer> {
   );
 
   const serverWithErrorHandler = serverInstance as unknown as {
-    onError?: (error: Error) => void;
+    onError?: (cb: (error: Error) => void) => void;
   };
   if (typeof serverWithErrorHandler.onError === 'function') {
     serverWithErrorHandler.onError((error: Error) => {
