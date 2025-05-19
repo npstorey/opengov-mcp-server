@@ -92,7 +92,7 @@ const mcpServer = new McpServer(
   },
   {
     capabilities: {
-      tools: {},
+      tools: {}
     },
   }
 );
@@ -148,7 +148,9 @@ async function startApp() {
 
       try {
         await mcpServer.connect(activeTransport);
-        console.log(`[MCP Server] SSE transport connected and mcpServer.connect() called for GET ${ssePath}.`);
+        console.log(
+          `[MCP Server] SSE transport connected and mcpServer.connect() called for GET ${ssePath}. headersSent after connect: ${res.headersSent}`
+        );
       } catch (connectError) {
         console.error(`[MCP Server] Error connecting MCP server to SSE transport: `, connectError);
         if (!res.headersSent) {
@@ -168,13 +170,16 @@ async function startApp() {
 
     app.post(messagesPath, (req: Request, res: Response) => {
       console.log(`[MCP Server] POST ${messagesPath}: Received message.`);
-      console.log('[MCP Server] Request Body for POST:', JSON.stringify(req.body, null, 2)); 
+      console.log('[MCP Server] Request Body for POST:', JSON.stringify(req.body, null, 2));
 
       if (activeTransport) {
+        res.on('finish', () => {
+          console.log(`[MCP Server] Response finished for POST ${messagesPath} with status ${res.statusCode}`);
+        });
         try {
           console.log('[MCP Server] Calling activeTransport.handlePostMessage...');
           activeTransport.handlePostMessage(req, res); // This is often synchronous for SSE message routing
-          console.log('[MCP Server] Returned from activeTransport.handlePostMessage.');
+          console.log('[MCP Server] Returned from activeTransport.handlePostMessage. headersSent:', res.headersSent);
         } catch (e) {
           console.error('[MCP Server] Error synchronously thrown by activeTransport.handlePostMessage:', e);
           if (!res.headersSent) {
