@@ -110,6 +110,7 @@ async function startApp() {
     app.post(messagesPath, (req: Request, res: Response) => {
       console.log(`[MCP Server] POST ${messagesPath}: Received message.`);
       console.log('[MCP Server] Request Body for POST:', JSON.stringify(req.body, null, 2));
+
       const sessionId = typeof req.query.sessionId === 'string' ? req.query.sessionId : undefined;
       if (!sessionId) {
         res.status(400).send('Missing sessionId');
@@ -122,9 +123,16 @@ async function startApp() {
         return;
       }
 
+      res.on('finish', () => {
+        console.log(
+          `[MCP Server] Response for POST ${messagesPath} session ${sessionId} finished with status ${res.statusCode}`
+        );
+      });
+
       try {
-        console.log(`[MCP Server] Handling message for session ${sessionId}`);
+        console.log(`[MCP Server] Calling activeTransport.handlePostMessage for session ${sessionId}`);
         transport.handlePostMessage(req, res, req.body);
+        console.log(`[MCP Server] Returned from activeTransport.handlePostMessage for session ${sessionId}`);
       } catch (e) {
         console.error('[MCP Server] Error from transport.handlePostMessage:', e);
         if (!res.headersSent) {
