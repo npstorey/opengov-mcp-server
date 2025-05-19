@@ -71,6 +71,14 @@ async function startApp() {
     app.get(ssePath, async (req: Request, res: Response) => {
       console.log(`[MCP Server] GET ${ssePath}: SSE connection request from ${req.ip}`);
 
+      // Set SSE-specific headers early to prevent proxy buffering
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      // Flush headers so proxies receive them immediately
+      res.flushHeaders();
+
       const mcpServer = await createMcpServerInstance();
       const transport = new SSEServerTransport(messagesPath, res);
       const sessionId = transport.sessionId;
