@@ -21,7 +21,8 @@ declare module '@modelcontextprotocol/sdk/server/mcp.js' {
     constructor(meta: { name: string; version: string }, options?: { capabilities?: any });
     tool(
       name: string,
-      paramSchema: any,
+      description: string,
+      inputSchema: any,
       handler: (
         params: any,
         context: { sendNotification(method: string, params?: any): Promise<void> }
