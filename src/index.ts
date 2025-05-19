@@ -85,29 +85,69 @@ const unifiedSocrataSchema = z.object({
     .optional(),
 }).strict();
 
-const mcpServer = new McpServer(
-  {
-    name: 'opengov-mcp-server',
-    version: '0.1.1',
-  },
-  {
-    capabilities: {
-      tools: {},
-    },
+async function createMcpServerInstance(): Promise<McpServer> {
+  const portalInfo = await getPortalInfo();
+  const description = `[${portalInfo.title}] ${UNIFIED_SOCRATA_TOOL.description}`;
+
+  const server = new McpServer(
+    { name: 'opengov-mcp-server', version: '0.1.1' },
+    { capabilities: { tools: {}, resources: {}, prompts: {} } }
   );
+
+  // Optional global error handler if available
+  if (typeof (server as any).onError === 'function') {
+    (server as any).onError((error: Error) => {
+      console.error('[MCP Server Global Error]', error);
+    });
+  }
+
+  const schemaWithDescription = unifiedSocrataSchema.describe(description);
+  server.tool(UNIFIED_SOCRATA_TOOL.name, schemaWithDescription, async (args) => {
+    const result = await handleSocrataTool(args);
+    return { content: [{ type: 'text', text: JSON.stringify(result) }] };
+  });
+
+  console.log('[MCP Server] Tool registered with description:', description);
 
   return server;
 }
 
+const transports: Record<string, SSEServerTransport> = {};
 
 async function startApp() {
   try {
-    const portalInfo = await getPortalInfo();
-    const description = `[${portalInfo.title}] ${UNIFIED_SOCRATA_TOOL.description}`;
+    const app = express();
+    app.use(express.json());
 
-    mcpServer.tool(UNIFIED_SOCRATA_TOOL.name, unifiedSocrataSchema, async (args) => {
-      const result = await handleSocrataTool(args);
-      return { content: [{ type: 'text', text: JSON.stringify(result) }] };
+    const port = Number(process.env.PORT) || 8000;
+    const ssePath = '/mcp/sse';
+    const messagesPath = '/mcp/messages';
+
+    app.get(ssePath, async (req: Request, res: Response) => {
+      console.log(`[MCP Server] GET ${ssePath}: SSE connection request from ${req.ip}`);
+
+      const mcpServer = await createMcpServerInstance();
+      const transport = new SSEServerTransport(messagesPath, res);
+      const sessionId = (transport as any).sessionId as string;
+
+      transports[sessionId] = transport;
+
+      try {
+        await mcpServer.connect(transport);
+        console.log(`[MCP Server] Connected transport session ${sessionId}`);
+      } catch (connectError) {
+        console.error('[MCP Server] Error connecting transport:', connectError);
+        if (!res.headersSent) {
+          res.status(500).send('Failed to establish MCP connection');
+        }
+        delete transports[sessionId];
+        return;
+      }
+
+      req.on('close', () => {
+        console.log(`[MCP Server] SSE connection closed for session ${sessionId}`);
+        delete transports[sessionId];
+      });
     });
     console.log('[MCP Server] Tool registered with description:', description);
 
@@ -119,11 +159,35 @@ async function startApp() {
       return;
     }
 
-    const transport = transports[sessionId];
-    if (!transport) {
-      res.status(404).send('Session not found or expired');
-      return;
-    }
+    app.post(messagesPath, (req: Request, res: Response) => {
+      console.log(`[MCP Server] POST ${messagesPath}: Received message.`);
+      console.log('[MCP Server] Request Body for POST:', JSON.stringify(req.body, null, 2));
+      const sessionId = typeof req.query.sessionId === 'string' ? req.query.sessionId : undefined;
+      if (!sessionId) {
+        res.status(400).send('Missing sessionId');
+        return;
+      }
+
+      const transport = transports[sessionId];
+      if (!transport) {
+        res.status(404).send('Invalid sessionId');
+        return;
+      }
+
+      try {
+        console.log(`[MCP Server] Handling message for session ${sessionId}`);
+        transport.handlePostMessage(req, res, req.body);
+      } catch (e) {
+        console.error('[MCP Server] Error from transport.handlePostMessage:', e);
+        if (!res.headersSent) {
+          res.status(500).send('Error processing message');
+        }
+      }
+    });
+    
+    app.get('/', (req: Request, res: Response) => {
+      res.status(200).send('OpenGov MCP Server is running. MCP endpoint at /mcp/sse (GET for SSE) and /mcp/messages (POST for client messages).');
+    });
 
     try {
       await transport.handlePostMessage(req, res, req.body);
