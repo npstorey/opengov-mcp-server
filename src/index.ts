@@ -11,7 +11,7 @@ import type { Request, Response } from 'express'; // Import Express types for be
 
 import {
   handleSocrataTool,
-  UNIFIED_SOCRATA_TOOL, // Assuming this is the single tool object
+  UNIFIED_SOCRATA_TOOL,
 } from './tools/socrata-tools.js';
 import { getPortalInfo } from './utils/portal-info.js';
 
@@ -94,16 +94,9 @@ const mcpServer = new McpServer(
     capabilities: {
       tools: {},
     },
-  }
-);
+  );
 
-// Add global error handler for mcpServer
-if (typeof (mcpServer as any).onError === 'function') { // Type guard
-  (mcpServer as any).onError((error: Error) => {
-    console.error('[MCP Server Global Error]', error);
-  });
-} else {
-  console.log('[MCP Server] mcpServer.onError method not found, skipping global error handler setup.');
+  return server;
 }
 
 
@@ -118,93 +111,48 @@ async function startApp() {
     });
     console.log('[MCP Server] Tool registered with description:', description);
 
-    const app = express();
-    app.use(express.json());
+  /* ---------- Client messages (POST) ---------- */
+  app.post(messagesPath, async (req: Request, res: Response) => {
+    const sessionId = req.query.sessionId as string | undefined;
+    if (!sessionId) {
+      res.status(400).send('Missing sessionId');
+      return;
+    }
 
-    const port = Number(process.env.PORT) || 8000;
-    const ssePath = '/mcp/sse';
-    const messagesPath = '/mcp/messages';
-    let activeTransport: SSEServerTransport | null = null;
+    const transport = transports[sessionId];
+    if (!transport) {
+      res.status(404).send('Session not found or expired');
+      return;
+    }
 
-    app.get(ssePath, async (req: Request, res: Response) => {
-      console.log(`[MCP Server] GET ${ssePath}: New SSE connection request from ${req.ip}`);
-      // Simplified: assume one active transport for now. For multiple clients, this needs more robust handling.
-      if (activeTransport) {
-        console.log('[MCP Server] An existing SSE transport was active. It will be overridden.');
-        // Consider if activeTransport.close() is needed/available if overwriting
-      }
-      
-      activeTransport = new SSEServerTransport(messagesPath, res);
-      console.log('[MCP Server] activeTransport created. Is SSEServerTransport instance:', activeTransport instanceof SSEServerTransport);
-      
-      // Add error handler for activeTransport
-      try {
-        (activeTransport as any).onerror = (error: Error) => {
-          console.error('[MCP Transport Error]', error);
-        };
-      } catch (err) {
-        console.log('[MCP Server] Could not set activeTransport.onerror handler:', err);
-      }
+    try {
+      await transport.handlePostMessage(req, res, req.body);
+    } catch (err) {
+      console.error(`[POST ${messagesPath}] handlePostMessage error`, err);
+      if (!res.headersSent) res.status(500).send('Error processing message');
+    }
+  });
 
-      try {
-        await mcpServer.connect(activeTransport);
-        console.log(`[MCP Server] SSE transport connected and mcpServer.connect() called for GET ${ssePath}.`);
-      } catch (connectError) {
-        console.error(`[MCP Server] Error connecting MCP server to SSE transport: `, connectError);
-        if (!res.headersSent) {
-          res.status(500).send("Failed to establish MCP connection");
-        }
-        return;
-      }
-      
-      req.on('close', () => {
-        console.log(`[MCP Server] GET ${ssePath}: SSE connection closed by client (${req.ip}). Clearing activeTransport.`);
-        // if (activeTransport && typeof activeTransport.close === 'function') {
-        //   activeTransport.close(); // If a close method exists on the transport
-        // }
-        activeTransport = null; 
-      });
-    });
+  /* ---------- Health check ---------- */
+  app.get('/', (_req: Request, res: Response) =>
+    res
+      .status(200)
+      .send(
+        'OpenGov MCP Server is running. SSE: GET /mcp/sse, Messages: POST /mcp/messages',
+      ),
+  );
 
-    app.post(messagesPath, (req: Request, res: Response) => {
-      console.log(`[MCP Server] POST ${messagesPath}: Received message.`);
-      console.log('[MCP Server] Request Body for POST:', JSON.stringify(req.body, null, 2)); 
-
-      if (activeTransport) {
-        try {
-          console.log('[MCP Server] Calling activeTransport.handlePostMessage...');
-          activeTransport.handlePostMessage(req, res); // This is often synchronous for SSE message routing
-          console.log('[MCP Server] Returned from activeTransport.handlePostMessage.');
-        } catch (e) {
-          console.error('[MCP Server] Error synchronously thrown by activeTransport.handlePostMessage:', e);
-          if (!res.headersSent) {
-            res.status(500).send('Error processing message');
-          }
-        }
-      } else {
-        console.error(`[MCP Server] POST ${messagesPath}: No active SSE transport to handle message`);
-        if (!res.headersSent) {
-          res.status(500).send('No active SSE transport');
-        }
-      }
-    });
-    
-    app.get('/', (req: Request, res: Response) => {
-      res.status(200).send('OpenGov MCP Server is running. MCP endpoint at /mcp/sse (GET for SSE) and /mcp/messages (POST for client messages).');
-    });
-
-    app.listen(port, '0.0.0.0', () => {
-      console.log(`🚀 MCP server (using Express + SSE) listening on port ${port}. SSE at ${ssePath}, Messages at ${messagesPath}`);
-    });
-
-  } catch (err) {
-    console.error('Fatal error starting Express app:', err);
-    process.exit(1);
-  }
+  /* ---------- Start server ---------- */
+  app.listen(port, '0.0.0.0', () => {
+    console.log(`🚀 Server listening on port ${port}`);
+  });
 }
 
+/* -------------------------------------------------------------------------- */
+/* Entrypoint                                                                 */
+/* -------------------------------------------------------------------------- */
 startApp().catch((err) => {
-  console.error('Uncaught initialization error for Express app:', err);
+  console.error('[Fatal] Uncaught error during startup', err);
   process.exit(1);
 });
 
