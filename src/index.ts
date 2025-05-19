@@ -1,178 +1,177 @@
 #!/usr/bin/env node
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import {
   type Tool,
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
 import express from 'express';
 import type { Request, Response } from 'express'; // Import Express types for better type safety
 
 import {
-  SOCRATA_TOOLS,
   handleSocrataTool,
   UNIFIED_SOCRATA_TOOL, // Assuming this is the single tool object
 } from './tools/socrata-tools.js';
-import { getPortalInfo, PortalInfo } from './utils/portal-info.js';
+import { getPortalInfo } from './utils/portal-info.js';
 
-const mcpServer = new Server(
-  {
-    name: 'opengov-mcp-server',
-    version: '0.1.1',
-  },
-  {
-    capabilities: {
-      tools: {}, // Server will automatically declare tools capability if setRequestHandler(ListToolsRequestSchema,...) is used
-    },
+const unifiedSocrataSchema = z.object({
+  type: z.enum([
+    'catalog',
+    'categories',
+    'tags',
+    'dataset-metadata',
+    'column-info',
+    'data-access',
+    'site-metrics',
+  ]).describe(
+    'The type of operation to perform:\n- catalog: List datasets with optional search\n- categories: List all dataset categories\n- tags: List all dataset tags\n- dataset-metadata: Get detailed metadata for a specific dataset\n- column-info: Get column details for a specific dataset\n- data-access: Access records from a dataset (with query support)\n- site-metrics: Get portal-wide statistics'
+  ),
+  domain: z
+    .string()
+    .describe('Optional domain (hostname only, without protocol). Used with all operation types.')
+    .optional(),
+  query: z
+    .string()
+    .describe(
+      'Search or query string with different uses depending on operation type:\n- For type=catalog: Search query to filter datasets\n- For type=data-access: SoQL query string for complex data filtering'
+    )
+    .optional(),
+  datasetId: z
+    .string()
+    .describe(
+      'Dataset identifier required for the following operations:\n- For type=dataset-metadata: Get dataset details\n- For type=column-info: Get column information\n- For type=data-access: Specify which dataset to query (e.g., 6zsd-86xi)'
+    )
+    .optional(),
+  soqlQuery: z
+    .string()
+    .describe(
+      'For type=data-access only. Optional SoQL query string for filtering data.\nThis is an alias for the query parameter and takes precedence if both are provided.'
+    )
+    .optional(),
+  select: z
+    .string()
+    .describe('For type=data-access only. Specifies which columns to return in the result set.')
+    .optional(),
+  where: z
+    .string()
+    .describe('For type=data-access only. Filters the rows to be returned (e.g., "magnitude > 3.0").')
+    .optional(),
+  order: z
+    .string()
+    .describe('For type=data-access only. Orders the results based on specified columns (e.g., "date DESC").')
+    .optional(),
+  group: z
+    .string()
+    .describe('For type=data-access only. Groups results for aggregate functions.')
+    .optional(),
+  having: z
+    .string()
+    .describe('For type=data-access only. Filters for grouped results, similar to where but for grouped data.')
+    .optional(),
+  q: z
+    .string()
+    .describe('For type=data-access only. Full text search parameter for free-text searching across the dataset.')
+    .optional(),
+  limit: z
+    .number()
+    .describe('Maximum number of results to return:\n- For type=catalog: Limits dataset results\n- For type=data-access: Limits data records returned')
+    .default(10)
+    .optional(),
+  offset: z
+    .number()
+    .describe('Number of results to skip for pagination:\n- For type=catalog: Skips dataset results\n- For type=data-access: Skips data records for pagination')
+    .default(0)
+    .optional(),
+}).strict();
+
+async function createMcpServerInstance(): Promise<McpServer> {
+  const portalInfo = await getPortalInfo();
+  const description = `[${portalInfo.title}] ${UNIFIED_SOCRATA_TOOL.description}`;
+
+  const server = new McpServer(
+    { name: 'opengov-mcp-server', version: '0.1.1' },
+    { capabilities: { tools: {}, resources: {}, prompts: {} } }
+  );
+
+  // Optional global error handler if available
+  if (typeof (server as any).onError === 'function') {
+    (server as any).onError((error: Error) => {
+      console.error('[MCP Server Global Error]', error);
+    });
   }
-);
 
-// Add global error handler for mcpServer
-if (typeof (mcpServer as any).onError === 'function') { // Type guard
-  (mcpServer as any).onError((error: Error) => {
-    console.error('[MCP Server Global Error]', error);
+  const schemaWithDescription = unifiedSocrataSchema.describe(description);
+  server.tool(UNIFIED_SOCRATA_TOOL.name, schemaWithDescription, async (args) => {
+    const result = await handleSocrataTool(args);
+    return { content: [{ type: 'text', text: JSON.stringify(result) }] };
   });
-} else {
-  console.log('[MCP Server] mcpServer.onError method not found, skipping global error handler setup.');
+
+  console.log('[MCP Server] Tool registered with description:', description);
+
+  return server;
 }
 
-mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const args = request.params.arguments || {};
-  const { name } = request.params;
-  try {
-    mcpServer.sendLoggingMessage({
-      level: 'info',
-      data: { message: `Handling tool call: ${name}`, tool: name, args },
-    });
-    let result: unknown;
-    if (name === UNIFIED_SOCRATA_TOOL.name) { // Use the name from your tool definition
-      result = await handleSocrataTool(args);
-    } else {
-      throw new Error(`Unknown tool: ${name}`);
-    }
-    let resultSize = 0;
-    try {
-      resultSize = JSON.stringify(result).length;
-    } catch (stringifyError) {
-      mcpServer.sendLoggingMessage({
-        level: 'error',
-        data: { message: `Could not stringify result for tool: ${name}`, tool: name, args, error: stringifyError },
-      });
-      result = { stringifyError: 'Could not serialize result' };
-      resultSize = JSON.stringify(result).length;
-    }
-    mcpServer.sendLoggingMessage({
-      level: 'info',
-      data: { message: `Tool call success: ${name}`, tool: name, resultSize },
-    });
-    return { content: [{ type: 'text', text: JSON.stringify(result) }], isError: false };
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    mcpServer.sendLoggingMessage({
-      level: 'error',
-      data: { message: `Tool call error: ${errorMessage}`, tool: name, args, error: err },
-    });
-    return { content: [{ type: 'text', text: `Error: ${errorMessage}` }], isError: true };
-  }
-});
-
-function enhanceToolsWithPortalInfo(tools: Tool[], portalInfo: PortalInfo): Tool[] {
-  return tools.map((tool) => ({
-    ...tool,
-    description: `[${portalInfo.title}] ${tool.description}`,
-  }));
-}
+const transports: Record<string, SSEServerTransport> = {};
 
 async function startApp() {
   try {
-    // Note: portalInfo and enhancedTools are now fetched inside the ListTools handler
-    // to ensure fresh data if DATA_PORTAL_URL changes or for first load on Render.
-
-    mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
-      console.log('[MCP Server] ListToolsRequestSchema handler: Fired (SUPER SIMPLE FALLBACK)'); // Log that this simplified version is active
-      const veryMinimalTool: Tool = {
-        name: "ping", // Simple, common name
-        description: "A super simple ping tool to test connectivity.",
-        inputSchema: { 
-          type: "object", 
-          properties: {} // No parameters
-        }
-        // No annotations for maximum simplicity initially
-      };
-      return {
-        tools: [veryMinimalTool]
-      };
-    });
-
     const app = express();
     app.use(express.json());
 
     const port = Number(process.env.PORT) || 8000;
     const ssePath = '/mcp/sse';
     const messagesPath = '/mcp/messages';
-    let activeTransport: SSEServerTransport | null = null;
 
     app.get(ssePath, async (req: Request, res: Response) => {
-      console.log(`[MCP Server] GET ${ssePath}: New SSE connection request from ${req.ip}`);
-      // Simplified: assume one active transport for now. For multiple clients, this needs more robust handling.
-      if (activeTransport) {
-        console.log('[MCP Server] An existing SSE transport was active. It will be overridden.');
-        // Consider if activeTransport.close() is needed/available if overwriting
-      }
-      
-      activeTransport = new SSEServerTransport(messagesPath, res);
-      console.log('[MCP Server] activeTransport created. Is SSEServerTransport instance:', activeTransport instanceof SSEServerTransport);
-      
-      // Add error handler for activeTransport
-      try {
-        (activeTransport as any).onerror = (error: Error) => {
-          console.error('[MCP Transport Error]', error);
-        };
-      } catch (err) {
-        console.log('[MCP Server] Could not set activeTransport.onerror handler:', err);
-      }
+      console.log(`[MCP Server] GET ${ssePath}: SSE connection request from ${req.ip}`);
+
+      const mcpServer = await createMcpServerInstance();
+      const transport = new SSEServerTransport(messagesPath, res);
+      const sessionId = (transport as any).sessionId as string;
+
+      transports[sessionId] = transport;
 
       try {
-        await mcpServer.connect(activeTransport);
-        console.log(`[MCP Server] SSE transport connected and mcpServer.connect() called for GET ${ssePath}.`);
+        await mcpServer.connect(transport);
+        console.log(`[MCP Server] Connected transport session ${sessionId}`);
       } catch (connectError) {
-        console.error(`[MCP Server] Error connecting MCP server to SSE transport: `, connectError);
+        console.error('[MCP Server] Error connecting transport:', connectError);
         if (!res.headersSent) {
-          res.status(500).send("Failed to establish MCP connection");
+          res.status(500).send('Failed to establish MCP connection');
         }
+        delete transports[sessionId];
         return;
       }
-      
+
       req.on('close', () => {
-        console.log(`[MCP Server] GET ${ssePath}: SSE connection closed by client (${req.ip}). Clearing activeTransport.`);
-        // if (activeTransport && typeof activeTransport.close === 'function') {
-        //   activeTransport.close(); // If a close method exists on the transport
-        // }
-        activeTransport = null; 
+        console.log(`[MCP Server] SSE connection closed for session ${sessionId}`);
+        delete transports[sessionId];
       });
     });
 
     app.post(messagesPath, (req: Request, res: Response) => {
       console.log(`[MCP Server] POST ${messagesPath}: Received message.`);
-      console.log('[MCP Server] Request Body for POST:', JSON.stringify(req.body, null, 2)); 
+      console.log('[MCP Server] Request Body for POST:', JSON.stringify(req.body, null, 2));
+      const sessionId = typeof req.query.sessionId === 'string' ? req.query.sessionId : undefined;
+      if (!sessionId) {
+        res.status(400).send('Missing sessionId');
+        return;
+      }
 
-      if (activeTransport) {
-        try {
-          console.log('[MCP Server] Calling activeTransport.handlePostMessage...');
-          activeTransport.handlePostMessage(req, res); // This is often synchronous for SSE message routing
-          console.log('[MCP Server] Returned from activeTransport.handlePostMessage.');
-        } catch (e) {
-          console.error('[MCP Server] Error synchronously thrown by activeTransport.handlePostMessage:', e);
-          if (!res.headersSent) {
-            res.status(500).send('Error processing message');
-          }
-        }
-      } else {
-        console.error(`[MCP Server] POST ${messagesPath}: No active SSE transport to handle message`);
+      const transport = transports[sessionId];
+      if (!transport) {
+        res.status(404).send('Invalid sessionId');
+        return;
+      }
+
+      try {
+        console.log(`[MCP Server] Handling message for session ${sessionId}`);
+        transport.handlePostMessage(req, res, req.body);
+      } catch (e) {
+        console.error('[MCP Server] Error from transport.handlePostMessage:', e);
         if (!res.headersSent) {
-          res.status(500).send('No active SSE transport');
+          res.status(500).send('Error processing message');
         }
       }
     });
@@ -195,3 +194,4 @@ startApp().catch((err) => {
   console.error('Uncaught initialization error for Express app:', err);
   process.exit(1);
 });
+
