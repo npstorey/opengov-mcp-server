@@ -4,10 +4,11 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import express from 'express';
 import type { Request, Response } from 'express'; // Import Express types for better type safety
+import { z } from 'zod';
 
 async function createMcpServerInstance(): Promise<McpServer> {
   console.log(
-    '[MCP Server Factory] Creating new McpServer instance (NO TOOLS REGISTERED TEST)'
+    '[MCP Server Factory] Creating new McpServer instance and registering simple_ping tool.'
   );
 
   const serverInstance = new McpServer(
@@ -22,6 +23,25 @@ async function createMcpServerInstance(): Promise<McpServer> {
     }
   );
 
+  // Register the simple_ping tool
+  serverInstance.tool(
+    'simple_ping',
+    'A very simple ping tool to check if the server is responding to tool calls.',
+    z.object({}).strict(),
+    async (params: Record<string, never>, context: any) => {
+      console.log(
+        '[MCP Server - SimplePingTool] simple_ping tool called with params:',
+        params
+      );
+      return {
+        content: [{ type: 'text', text: 'pong' }],
+        isError: false,
+      };
+    }
+  );
+
+  console.log('[MCP Server Factory] simple_ping tool successfully registered.');
+
   const serverWithErrorHandler = serverInstance as unknown as {
     onError?: (cb: (error: Error) => void) => void;
   };
@@ -31,9 +51,8 @@ async function createMcpServerInstance(): Promise<McpServer> {
     });
   }
 
-  // NO mcpServer.tool(...) CALL HERE
   console.log(
-    '[MCP Server Factory] McpServer instance created with no tools explicitly registered.'
+    '[MCP Server Factory] McpServer instance created, registering simple_ping tool.'
   );
   return serverInstance;
 }
