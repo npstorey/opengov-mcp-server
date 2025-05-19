@@ -86,10 +86,38 @@ async function startApp() {
         return;
       }
 
+      console.log(
+        `[MCP Server - POST Detail] Processing message for sessionId: ${sessionId}`
+      );
+      console.log(
+        `[MCP Server - POST Detail] Currently active transport keys: ${Object.keys(transports)}`
+      );
+
       const transport = transports[sessionId];
       if (!transport) {
+        console.warn(
+          `[MCP Server - POST Detail] Transport NOT FOUND for sessionId: ${sessionId}. Sending 404.`
+        );
         res.status(404).send('Invalid sessionId');
         return;
+      }
+
+      console.log(`[MCP Server - POST Detail] Transport FOUND for sessionId: ${sessionId}`);
+
+      const sseExpressRes = (transport as any).res as Response | undefined;
+      if (sseExpressRes) {
+        console.log(
+          `[MCP Server - POST Detail] SSE res.writable: ${sseExpressRes.writable}`
+        );
+        console.log(`[MCP Server - POST Detail] SSE res.closed: ${sseExpressRes.closed}`);
+        console.log(
+          `[MCP Server - POST Detail] SSE res.headersSent: ${sseExpressRes.headersSent}`
+        );
+        console.log('[MCP Server - POST Detail] Transport and sseResponseObject seem valid for processing.');
+      } else {
+        console.warn(
+          `[MCP Server - POST Detail] Could not access underlying SSE Express Response object on transport for session ${sessionId} to check its state.`
+        );
       }
 
       res.on('finish', () => {
