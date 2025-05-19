@@ -1,172 +1,78 @@
-# OpenGov MCP Server
+# OpenGov MCP Server (Remote-Ready Fork)
 
-An MCP (Model Context Protocol) server that enables MCP clients like Claude Desktop to access Socrata Open Data APIs. This integration allows Claude Desktop to search for, retrieve, and analyze public datasets from government data portals.
+This project is a fork of Scott Robbin's original [srobbin/opengov-mcp-server](https://github.com/srobbin/opengov-mcp-server). The primary goal of this fork is to adapt the server for deployment as a **remote, HTTP-based Model Context Protocol (MCP) server**, suitable for platforms like Render.com, rather than solely local command-line (stdio) execution.
 
-## Overview
+The aim is to enable MCP clients (like Claude.ai or Claude Desktop configured for remote servers) to connect over the internet and utilize the Socrata Open Data API integration provided by this server.
 
-This MCP server provides access to open data from any Socrata-powered data portal, including those from cities, states, and federal agencies such as:
-- [Chicago](https://data.cityofchicago.org)
-- [NYC](https://data.cityofnewyork.us)
-- [San Francisco](https://data.sfgov.org)
-- [Los Angeles](https://data.lacity.org)
-- [And other government entities](https://dev.socrata.com/data/)
+## Original Project Overview
 
-No API key is required for basic usage, as the server accesses public data.
+The original server enables MCP clients to access Socrata Open Data APIs, allowing interaction with public datasets from various government data portals. Key features include:
 
-## Features
+*   Searching and discovering datasets.
+*   Viewing dataset metadata and column information.
+*   Running SQL-like queries (SoQL) to retrieve and analyze data.
+*   Getting portal usage statistics.
 
-With this MCP server, clients can:
-- Search and discover datasets by keyword, category, or tags
-- View dataset metadata and column information
-- Run SQL-like queries to retrieve and analyze data
-- Get portal usage statistics
+## Goals of This Fork
 
-## Installation for Claude Desktop
+1.  **Remote Deployability:** Refactor the server to use an HTTP-based MCP transport (e.g., `SSEServerTransport` or `StreamableHTTPServerTransport` from the `@modelcontextprotocol/sdk`) to allow deployment as a web service.
+2.  **Platform Compatibility:** Ensure the build process and runtime are compatible with cloud hosting platforms like Render.com.
+3.  **Robustness:** Implement necessary error handling and logging for a remote server environment.
+4.  **ESM & TypeScript:** Maintain the project as a Node.js application using ES Modules and TypeScript, with appropriate build configurations.
 
-### Quick Setup with npx (Recommended)
+## Current Status & Challenges
 
-The easiest way to use this MCP server is with npx, which doesn't require any installation:
+As of the last update, the project has successfully:
+*   Been configured to build with `tsc` outputting to a `dist` directory.
+*   Attempted integration with both `@modelcontextprotocol/sdk`'s `StreamableHTTPServerTransport` and `SSEServerTransport` using `express` for the HTTP layer.
+*   Successfully deployed to Render.com where the basic Express server starts and listens on the assigned port, passing Render's health checks (when a `/` root endpoint is provided).
+*   Confirmed that Claude.ai can make an initial connection to the deployed server's SSE endpoint.
 
-1. **Create or edit your Claude Desktop configuration**:
-   
-   Create or edit `claude_desktop_config.json` in your home directory:
+The primary ongoing challenge is ensuring that after the initial MCP `initialize` handshake, Claude.ai successfully receives the list of available tools and enables them, rather than showing them as "Disabled." This involves:
+*   Correctly implementing the chosen HTTP transport (`SSEServerTransport` is the current focus due to SDK documentation and file packaging observations).
+*   Ensuring the `ListToolsRequestSchema` handler is correctly invoked and responds in the format expected by the client and the MCP SDK.
+*   Investigating the SDK's behavior regarding the `initialize` sequence and subsequent `listTools` requests over HTTP-based transports.
 
-   ```json
-   {
-     "mcpServers": { 
-       "opengov": {
-         "command": "npx",
-         "args": ["-y", "opengov-mcp-server@latest"],
-         "env": {
-           "DATA_PORTAL_URL": "https://data.cityofchicago.org"
-         }
-       }
-     }
-   }
-   ```
+The original `srobbin/opengov-mcp-server` used `StdioServerTransport`, which is suitable for local `npx` execution but not for a remote web service. This fork requires adapting to an HTTP transport.
 
-   You can replace the DATA_PORTAL_URL with any Socrata-powered data portal.
+## Key Technologies & Configuration
 
-2. **Restart Claude Desktop** (if it was already running)
+*   **Node.js:** Version 18.19.1 (as per Render environment)
+*   **TypeScript:** For type safety and modern JavaScript features.
+*   **ES Modules (`type: "module"`):** In `package.json`.
+*   **`@modelcontextprotocol/sdk`:** Currently targeting version `1.9.0`.
+*   **HTTP Transport:** Currently implementing `SSEServerTransport` with `express`.
+*   **Build Process:** `npm run build` (which runs `tsc`).
+*   **Deployment Platform:** Render.com (as a Web Service).
+*   **Environment Variables on Render:**
+    *   `DATA_PORTAL_URL`: (e.g., `https://data.cityofnewyork.us`)
+    *   `REDIS_URL`: (Currently configured but not actively used by the core server logic visible in this fork).
+    *   `PORT`: Provided by Render.
 
-3. **Start using the MCP server**:
-   
-   In Claude Desktop, you can now ask questions like:
-   
-   ```
-   How many cars were towed in Chicago this month?
-   ```
+## Development & Deployment
 
-   and you can follow up with questions that drill further into detail:
+### Local Development (Recommended Workflow)
 
-   ```
-   Which make and color were towed the most?
-   Also, were there any interesting vanity plates?
-   ```
+1.  Ensure Node.js (v18.19.1 or as specified in `package.json`) and npm are installed.
+2.  Clone this repository.
+3.  Delete `package-lock.json` and the `node_modules` directory if they exist to ensure a clean start when switching SDK versions or making significant dependency changes.
+4.  Run `npm install` to install dependencies and generate/update `package-lock.json`.
+5.  Make code changes in the `src` directory.
+6.  Run `npm run build` to compile TypeScript and run checks. Address any errors.
+7.  Commit changes, including `package.json` and `package-lock.json`.
+8.  Push to GitHub.
 
-   The first time you run a query, npx will automatically download and run the latest version of the server.
+### Deployment to Render.com
 
-### Manual Installation from Source
+1.  Ensure the Render.com service is connected to this GitHub repository and branch.
+2.  The Build Command on Render should be: `npm install && npm run build`
+3.  The Start Command on Render should be: `npm start` (which executes `NODE_ENV=production node ./dist/index.js` or `node ./dist/index.js`)
+4.  Ensure the Health Check Path on Render is set to `/`.
+5.  Trigger a manual deploy or allow auto-deploy on commit.
+6.  Monitor Render logs for build progress, server startup messages, and any runtime errors.
 
-If you prefer to run from source (for development or customization):
+## Next Steps in Troubleshooting
 
-1. **Clone this repository**:
-   ```bash
-   git clone https://github.com/srobbin/opengov-mcp-server.git
-   cd opengov-mcp-server
-   ```
+The immediate next step is to ensure the `ListToolsRequestSchema` handler is correctly invoked after a successful `initialize` handshake when using `SSEServerTransport` and that the tool list it provides is accepted by Claude.ai, enabling the tools. This involves careful logging and comparison with official SDK examples for `SSEServerTransport`.
 
-2. **Install dependencies and build**:
-   ```bash
-   npm install
-   npm run build
-   ```
-
-3. **Create Claude Desktop configuration**:
-   
-   Create or edit `claude_desktop_config.json` in your home directory:
-
-   ```json
-   {
-     "mcpServers": { 
-       "opengov": {
-         "command": "node",
-         "args": [
-           "/path/to/your/opengov-mcp-server/dist/index.js"
-         ],
-         "env": {
-           "DATA_PORTAL_URL": "https://data.cityofchicago.org"
-         }
-       }
-     }
-   }
-   ```
-
-   Replace `/path/to/your/opengov-mcp-server` with the actual path where you cloned the repository.
-
-4. **Restart Claude Desktop** (if it was already running)
-
-## Available Tool: get_data
-
-This MCP server provides a unified `get_data` tool that Claude Desktop uses to access Socrata data.
-
-### Parameters
-
-- `type` (string, required): Operation type
-  - `catalog`: Search and list datasets
-  - `categories`: List dataset categories
-  - `tags`: List dataset tags
-  - `dataset-metadata`: Get dataset details
-  - `column-info`: Get dataset column information
-  - `data-access`: Query and retrieve records
-  - `site-metrics`: Get portal statistics
-
-- `domain` (string, optional): Data portal hostname (without protocol)
-
-- `query` (string, optional): Search query for datasets
-
-- `datasetId` (string): Dataset identifier for specific operations
-
-- `soqlQuery` (string, optional): SoQL query for filtering data
-
-- `limit` (number, optional): Maximum results to return (default: 10)
-
-- `offset` (number, optional): Results to skip for pagination (default: 0)
-
-### Example Queries
-
-These are examples of how Claude Desktop will format queries to the MCP server:
-
-```javascript
-// Find datasets about budgets
-{
-  "type": "catalog",
-  "query": "budget",
-  "limit": 5
-}
-
-// Get information about a dataset
-{
-  "type": "dataset-metadata",
-  "datasetId": "6zsd-86xi"
-}
-
-// Query dataset records with SQL-like syntax
-{
-  "type": "data-access",
-  "datasetId": "6zsd-86xi",
-  "soqlQuery": "SELECT * WHERE amount > 1000 ORDER BY date DESC",
-  "limit": 10
-}
-```
-
-## Configuration Options
-
-The server requires one environment variable:
-
-- `DATA_PORTAL_URL`: The Socrata data portal URL (e.g., `https://data.cityofchicago.org`)
-
-This can be set:
-- In the Claude Desktop configuration (recommended)
-- In your environment variables
-- Via command line: `DATA_PORTAL_URL=https://data.cityofchicago.org opengov-mcp-server`
+Refer to the project's issue tracker and commit history for detailed troubleshooting attempts.
