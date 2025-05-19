@@ -22,7 +22,7 @@ declare module '@modelcontextprotocol/sdk/server/mcp.js' {
     tool(
       name: string,
       description: string,
-      inputSchema: any,
+      inputSchema: import('zod').ZodTypeAny,
       handler: (
         params: any,
         context: { sendNotification(method: string, params?: any): Promise<void> }
