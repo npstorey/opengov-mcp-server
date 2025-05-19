@@ -39,9 +39,10 @@ declare module '@modelcontextprotocol/sdk/server/sse.js' {
 
   export class SSEServerTransport {
     constructor(postMessagesUrl: string, res: ExpressResponse);
-    handlePostMessage(req: ExpressRequest, res: ExpressResponse): void;
+    readonly sessionId: string;
+    handlePostMessage(req: ExpressRequest, res: ExpressResponse, body?: any): void;
     // Add other methods like 'close' if they are documented and needed
-    // close?(): void; 
+    // close?(): void;
   }
 }
 
