@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // REMOVE .js extensions for SDK imports in mocks and actual imports
-vi.mock('@modelcontextprotocol/sdk/server', () => { // NO suffix
+vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => {
   return {
-    Server: vi.fn().mockImplementation(() => ({
+    McpServer: vi.fn().mockImplementation(() => ({
       connect: vi.fn(),
-      setRequestHandler: vi.fn(),
+      tool: vi.fn(),
       sendLoggingMessage: vi.fn(),
     })),
   };
@@ -22,7 +22,7 @@ vi.mock('@modelcontextprotocol/sdk/server/stdio', () => { // NO suffix
 });
 
 // Import the mocked modules
-import { Server } from '@modelcontextprotocol/sdk/server'; // NO suffix
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio'; // NO suffix
 
 describe('Server initialization', () => {
@@ -33,7 +33,7 @@ describe('Server initialization', () => {
 
   it('should create server with correct metadata', () => {
     // Manually execute the server setup similar to index.ts
-    new Server(
+    new McpServer(
       {
         name: 'true-bench-mcp',
         version: '0.1.0'
@@ -46,8 +46,8 @@ describe('Server initialization', () => {
       }
     );
 
-    // Assert that Server was called with correct parameters
-    expect(Server).toHaveBeenCalledWith(
+  // Assert that McpServer was called with correct parameters
+    expect(McpServer).toHaveBeenCalledWith(
       {
         name: 'true-bench-mcp',
         version: '0.1.0'
@@ -62,7 +62,7 @@ describe('Server initialization', () => {
   });
 
   it('should connect server to transport', async () => {
-    const server = new Server(
+    const server = new McpServer(
       { name: 'test', version: '1.0.0' },
       { capabilities: { tools: {}, logging: {} } }
     );
@@ -73,3 +73,4 @@ describe('Server initialization', () => {
     expect(server.connect).toHaveBeenCalledWith(transport);
   });
 });
+
