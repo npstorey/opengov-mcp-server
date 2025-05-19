@@ -2,7 +2,10 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
-import { type Tool } from '@modelcontextprotocol/sdk/types.js'; // CallToolRequestSchema and ListToolsRequestSchema not needed with McpServer.tool()
+import {
+  type Tool,
+} from '@modelcontextprotocol/sdk/types.js';
+
 import { z } from 'zod';
 import express from 'express';
 import type { Request, Response } from 'express';
@@ -11,82 +14,88 @@ import {
   handleSocrataTool,
   UNIFIED_SOCRATA_TOOL,
 } from './tools/socrata-tools.js';
-import { getPortalInfo, PortalInfo } from './utils/portal-info.js';
 
-const unifiedSocrataSchema = z.object({
-  type: z.enum([
-    'catalog',
-    'categories',
-    'tags',
-    'dataset-metadata',
-    'column-info',
-    'data-access',
-    'site-metrics',
-  ]).describe(
-    'The type of operation to perform:\n- catalog: List datasets with optional search\n- categories: List all dataset categories\n- tags: List all dataset tags\n- dataset-metadata: Get detailed metadata for a specific dataset\n- column-info: Get column details for a specific dataset\n- data-access: Access records from a dataset (with query support)\n- site-metrics: Get portal-wide statistics'
-  ),
-  domain: z
-    .string()
-    .describe('Optional domain (hostname only, without protocol). Used with all operation types.')
-    .optional(),
-  query: z
-    .string()
-    .describe(
-      'Search or query string with different uses depending on operation type:\n- For type=catalog: Search query to filter datasets\n- For type=data-access: SoQL query string for complex data filtering'
-    )
-    .optional(),
-  datasetId: z
-    .string()
-    .describe(
-      'Dataset identifier required for the following operations:\n- For type=dataset-metadata: Get dataset details\n- For type=column-info: Get column information\n- For type=data-access: Specify which dataset to query (e.g., 6zsd-86xi)'
-    )
-    .optional(),
-  soqlQuery: z
-    .string()
-    .describe(
-      'For type=data-access only. Optional SoQL query string for filtering data.\nThis is an alias for the query parameter and takes precedence if both are provided.'
-    )
-    .optional(),
-  select: z
-    .string()
-    .describe('For type=data-access only. Specifies which columns to return in the result set.')
-    .optional(),
-  where: z
-    .string()
-    .describe('For type=data-access only. Filters the rows to be returned (e.g., "magnitude > 3.0").')
-    .optional(),
-  order: z
-    .string()
-    .describe('For type=data-access only. Orders the results based on specified columns (e.g., "date DESC").')
-    .optional(),
-  group: z
-    .string()
-    .describe('For type=data-access only. Groups results for aggregate functions.')
-    .optional(),
-  having: z
-    .string()
-    .describe('For type=data-access only. Filters for grouped results, similar to where but for grouped data.')
-    .optional(),
-  q: z
-    .string()
-    .describe('For type=data-access only. Full text search parameter for free-text searching across the dataset.')
-    .optional(),
-  limit: z
-    .number()
-    .describe('Maximum number of results to return:\n- For type=catalog: Limits dataset results\n- For type=data-access: Limits data records returned')
-    .default(10)
-    .optional(),
-  offset: z
-    .number()
-    .describe('Number of results to skip for pagination:\n- For type=catalog: Skips dataset results\n- For type=data-access: Skips data records for pagination')
-    .default(0)
-    .optional(),
-}).strict();
+import { getPortalInfo } from './utils/portal-info.js';
 
-// Function to create and configure a new McpServer instance
 async function createMcpServerInstance(): Promise<McpServer> {
   console.log('[MCP Server Factory] Creating new McpServer instance...');
-  const portalInfo = await getPortalInfo(); // Fetch portal info for this instance
+  const portalInfo = await getPortalInfo();
+  const toolDescription = `[${portalInfo.title}] ${UNIFIED_SOCRATA_TOOL.description}`;
+
+  const unifiedSocrataSchema = z
+    .object({
+      type: z
+        .enum([
+          'catalog',
+          'categories',
+          'tags',
+          'dataset-metadata',
+          'column-info',
+          'data-access',
+          'site-metrics',
+        ])
+        .describe(
+          'The type of operation to perform:\n- catalog: List datasets with optional search\n- categories: List all dataset categories\n- tags: List all dataset tags\n- dataset-metadata: Get detailed metadata for a specific dataset\n- column-info: Get column details for a specific dataset\n- data-access: Access records from a dataset (with query support)\n- site-metrics: Get portal-wide statistics'
+        ),
+      domain: z
+        .string()
+        .describe('Optional domain (hostname only, without protocol). Used with all operation types.')
+        .optional(),
+      query: z
+        .string()
+        .describe(
+          'Search or query string with different uses depending on operation type:\n- For type=catalog: Search query to filter datasets\n- For type=data-access: SoQL query string for complex data filtering'
+        )
+        .optional(),
+      datasetId: z
+        .string()
+        .describe(
+          'Dataset identifier required for the following operations:\n- For type=dataset-metadata: Get dataset details\n- For type=column-info: Get column information\n- For type=data-access: Specify which dataset to query (e.g., 6zsd-86xi)'
+        )
+        .optional(),
+      soqlQuery: z
+        .string()
+        .describe(
+          'For type=data-access only. Optional SoQL query string for filtering data.\nThis is an alias for the query parameter and takes precedence if both are provided.'
+        )
+        .optional(),
+      select: z
+        .string()
+        .describe('For type=data-access only. Specifies which columns to return in the result set.')
+        .optional(),
+      where: z
+        .string()
+        .describe('For type=data-access only. Filters the rows to be returned (e.g., "magnitude > 3.0").')
+        .optional(),
+      order: z
+        .string()
+        .describe('For type=data-access only. Orders the results based on specified columns (e.g., "date DESC").')
+        .optional(),
+      group: z
+        .string()
+        .describe('For type=data-access only. Groups results for aggregate functions.')
+        .optional(),
+      having: z
+        .string()
+        .describe('For type=data-access only. Filters for grouped results, similar to where but for grouped data.')
+        .optional(),
+      q: z
+        .string()
+        .describe('For type=data-access only. Full text search parameter for free-text searching across the dataset.')
+        .optional(),
+      limit: z
+        .number()
+        .describe('Maximum number of results to return:\n- For type=catalog: Limits dataset results\n- For type=data-access: Limits data records returned')
+        .default(10)
+        .optional(),
+      offset: z
+        .number()
+        .describe('Number of results to skip for pagination:\n- For type=catalog: Skips dataset results\n- For type=data-access: Skips data records for pagination')
+        .default(0)
+        .optional(),
+    })
+    .strict()
+    .describe(toolDescription);
 
   const serverInstance = new McpServer(
     {
@@ -95,50 +104,38 @@ async function createMcpServerInstance(): Promise<McpServer> {
     },
     {
       capabilities: {
-        tools: {}, // Correctly declaring only tools capability
-        // resources: {}, // Keep these commented out unless you implement them
-        // prompts: {},
+
+        tools: {},
       },
     }
   );
 
-  // Add global error handler for this specific McpServer instance
   if (typeof (serverInstance as any).onError === 'function') {
     (serverInstance as any).onError((error: Error) => {
-      console.error('[McpServer Instance Error]', error);
+      console.error('[MCP Server Global Error]', error);
     });
   } else {
-    console.log('[McpServer Factory] serverInstance.onError method not found.');
+    console.log('[MCP Server] mcpServer.onError method not found, skipping global error handler setup.');
   }
 
-  const toolDescription = `[${portalInfo.title}] ${UNIFIED_SOCRATA_TOOL.description}`;
   serverInstance.tool(
     UNIFIED_SOCRATA_TOOL.name,
-    toolDescription, // Pass the enhanced description
     unifiedSocrataSchema,
-    async (args: any) => { // args will be validated by Zod
+    async (args: any) => {
       console.log(`[McpServer Tool] Calling tool: ${UNIFIED_SOCRATA_TOOL.name} with args:`, args);
-      try {
-        const result = await handleSocrataTool(args);
-        return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-      } catch (toolError) {
-        console.error(`[McpServer Tool] Error in handleSocrataTool:`, toolError);
-        return { 
-          content: [{ type: 'text', text: `Error executing tool: ${toolError instanceof Error ? toolError.message : String(toolError)}` }],
-          isError: true 
-        };
-      }
+      const result = await handleSocrataTool(args);
+      return { content: [{ type: 'text', text: JSON.stringify(result) }] };
     }
   );
-  console.log(`[MCP Server Factory] Tool '${UNIFIED_SOCRATA_TOOL.name}' registered for this McpServer instance.`);
 
   return serverInstance;
 }
 
 // Main application setup and start function
 async function startApp() {
-  const app = express();
-  app.use(express.json());
+
+  try {
+    const mcpServer = await createMcpServerInstance();
 
   const port = Number(process.env.PORT) || 8000;
   const ssePath = '/mcp/sse';
@@ -242,4 +239,5 @@ async function startApp() {
 startApp().catch((err) => { // Call startApp to actually run the server
   console.error('Uncaught initialization error for Express app:', err);
   process.exit(1);
+
 });
