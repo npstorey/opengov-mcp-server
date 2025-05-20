@@ -29,8 +29,8 @@ async function createMcpServerInstance(): Promise<McpServer> {
   serverInstance.tool(
     'simple_ping',
     'A very simple ping tool to check if the server is responding to tool calls.',
-    z.object({}).strict(),
-    async (params: Record<string, never>, context: any) => {
+    z.any(),
+    async (params: any, context: any) => {
       console.log(
         '[MCP Server - SimplePingTool] simple_ping tool called with params:',
         params
