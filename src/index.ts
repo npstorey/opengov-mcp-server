@@ -1,38 +1,30 @@
 #!/usr/bin/env node
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
-import type { Request, Response } from 'express'; // Import Express types for better type safety
+import type { Request, Response } from 'express';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import dotenv from 'dotenv';
 import { UNIFIED_SOCRATA_TOOL, handleSocrataTool } from './tools/socrata-tools.js';
+import crypto from 'crypto';
+
 dotenv.config();
 
+// Simplified: creates and configures an McpServer instance, does NOT connect it.
 async function createMcpServerInstance(): Promise<McpServer> {
   console.log(
-    '[MCP Server Factory] Creating new McpServer instance and registering UNIFIED_SOCRATA_TOOL.'
+    '[MCP Server Factory] Creating McpServer instance, registering UNIFIED_SOCRATA_TOOL.'
   );
-
   const serverInstance = new McpServer(
-    {
-      name: 'opengov-mcp-server',
-      version: '0.1.1',
-    },
-    {
-      capabilities: {
-        tools: {},
-      },
-    }
+    { name: 'opengov-mcp-server', version: '0.1.1' },
+    { capabilities: { tools: {} } } as any // Cast options if ServerOptions shim is not complete
   );
 
-  // Register UNIFIED_SOCRATA_TOOL
-  // IMPORTANT ASSUMPTION: UNIFIED_SOCRATA_TOOL.inputSchema will be made a Zod schema object.
-  // If it's still a JSON schema object from socrata-tools.ts, this will fail at runtime
-  // or cause the same '_def' error.
   serverInstance.tool(
     UNIFIED_SOCRATA_TOOL.name,
     UNIFIED_SOCRATA_TOOL.description,
-    UNIFIED_SOCRATA_TOOL.inputSchema as any, // Temporarily cast, expecting it to be Zod
+    UNIFIED_SOCRATA_TOOL.inputSchema as any,
     async (params: any, context: any) => {
       console.log(
         `[MCP Server - ${UNIFIED_SOCRATA_TOOL.name}] tool called with params:`,
@@ -40,171 +32,142 @@ async function createMcpServerInstance(): Promise<McpServer> {
       );
       try {
         const result = await handleSocrataTool(params);
-        // Ensure the result is in the expected format: { content: [], isError?: boolean }
-        // handleSocrataTool likely returns the data directly, so we need to wrap it.
-        return { content: [{ type: 'json', json: result }], isError: false }; // Or infer type if possible
+        return { content: [{ type: 'json', json: result }], isError: false };
       } catch (error: any) {
         console.error(`[MCP Server - ${UNIFIED_SOCRATA_TOOL.name}] Error:`, error);
         return {
           content: [{ type: 'text', text: `Error in ${UNIFIED_SOCRATA_TOOL.name}: ${error.message}` }],
-          isError: true
+          isError: true,
         };
       }
     }
   );
-
-  console.log('[MCP Server Factory] UNIFIED_SOCRATA_TOOL successfully registered.');
-
-  const serverWithErrorHandler = serverInstance as unknown as {
-    onError?: (cb: (error: Error) => void) => void;
-  };
-  if (typeof serverWithErrorHandler.onError === 'function') {
-    serverWithErrorHandler.onError((error: Error) => {
-      console.error('[MCP Server Global Error]', error);
-    });
-  }
-
+  console.log('[MCP Server Factory] UNIFIED_SOCRATA_TOOL registered on instance.');
+  
+  // Error handling can be set on the internal server instance if needed, or McpServer itself if it exposes it.
+  // const internalServer = serverInstance.server as unknown as { onError?: (cb: (error: Error) => void) => void; };
+  // if (typeof internalServer.onError === 'function') {
+  //   internalServer.onError((error: Error) => {
+  //     console.error('[MCP Internal Server Global Error]', error);
+  //   });
+  // }
   return serverInstance;
 }
 
-const transports: Record<string, SSEServerTransport> = {};
+function generateSessionId(): string {
+  return crypto.randomBytes(16).toString('hex');
+}
 
 async function startApp() {
+  let mainTransportInstance: StreamableHTTPServerTransport | undefined = undefined;
+  let singleMcpServer: McpServer | undefined = undefined;
+
   try {
     const app = express();
     app.use(express.json());
 
     const port = Number(process.env.PORT) || 8000;
-    const ssePath = '/mcp/sse';
-    const messagesPath = '/mcp/messages';
+    const mcpPath = '/mcp';
 
-    app.get(ssePath, async (req: Request, res: Response) => {
-      console.log(`[MCP Server] GET ${ssePath}: SSE connection request from ${req.ip}`);
-
-      // Set custom SSE-specific headers to prevent proxy buffering
-      // Allow SSEServerTransport to set the Content-Type and status
-      res.setHeader('Cache-Control', 'no-cache, no-transform');
-      res.setHeader('Connection', 'keep-alive');
-      res.setHeader('X-Accel-Buffering', 'no'); // For Nginx-like proxies
-
-      // Do not flush headers here; SSEServerTransport will handle it
-
-      const mcpServer = await createMcpServerInstance();
-      const transport = new SSEServerTransport(messagesPath, res);
-      const sessionId = transport.sessionId;
-
-      transports[sessionId] = transport;
-
-      try {
-        await mcpServer.connect(transport);
-        console.log(`[MCP Server] Connected transport session ${sessionId}`);
-      } catch (connectError) {
-        console.error('[MCP Server] Error connecting transport:', connectError);
-        if (!res.headersSent) {
-          res.status(500).send('Failed to establish MCP connection');
-        }
-        delete transports[sessionId];
-        return;
-      }
-
-      req.on('close', () => {
-        console.log(
-          `[MCP Server - SSE Close] SSE connection closing for session ${sessionId}...`
-        );
-        console.log(
-          `[MCP Server - SSE Close] Deleting transport for sessionId: ${sessionId}`
-        );
-        delete transports[sessionId];
-        console.log(
-          `[MCP Server - SSE Close] Transport for session ${sessionId} successfully deleted.`
-        );
-        console.log(
-          `[MCP Server - SSE Close] Active transport keys after deletion: ${Object.keys(transports)}`
-        );
-        console.log(`[MCP Server] SSE connection closed for session ${sessionId}`);
-      });
+    // --- Create Single Transport Instance --- 
+    console.log('[MCP Setup] Creating main StreamableHTTPServerTransport instance...');
+    mainTransportInstance = new StreamableHTTPServerTransport({
+      sessionIdGenerator: generateSessionId,
+      onsessioninitialized: (sessionId: string) => {
+        // This callback is primarily for the transport to signal session activity.
+        // We no longer create McpServer instances here.
+        // The single McpServer will handle all sessions through the connected transport.
+        console.log(`[MCP Transport - onsessioninitialized] Session activity detected/initialized: ${sessionId}`);
+      },
     });
 
-    app.post(messagesPath, (req: Request, res: Response) => {
-      console.log(`[MCP Server] POST ${messagesPath}: Received message.`);
-      console.log('[MCP Server] Request Body for POST:', JSON.stringify(req.body, null, 2));
+    // --- Create Single McpServer Instance --- 
+    console.log('[MCP Setup] Creating single McpServer instance...');
+    singleMcpServer = await createMcpServerInstance();
 
-      const sessionId = typeof req.query.sessionId === 'string' ? req.query.sessionId : undefined;
-      if (!sessionId) {
-        res.status(400).send('Missing sessionId');
-        return;
-      }
-
-      console.log(
-        `[MCP Server - POST Detail] Processing message for sessionId: ${sessionId}`
-      );
-      console.log(
-        `[MCP Server - POST Detail] Currently active transport keys: ${Object.keys(transports)}`
-      );
-
-      const transport = transports[sessionId];
-      if (!transport) {
-        console.warn(
-          `[MCP Server - POST Detail] Transport NOT FOUND for sessionId: ${sessionId}. Sending 404.`
-        );
-        res.status(404).send('Invalid sessionId');
-        return;
-      }
-
-      console.log(`[MCP Server - POST Detail] Transport FOUND for sessionId: ${sessionId}`);
-
-      const sseExpressRes = (transport as any).res as Response | undefined;
-      if (sseExpressRes) {
-        console.log(
-          `[MCP Server - POST Detail] SSE res.writable: ${sseExpressRes.writable}`
-        );
-        console.log(`[MCP Server - POST Detail] SSE res.closed: ${sseExpressRes.closed}`);
-        console.log(
-          `[MCP Server - POST Detail] SSE res.headersSent: ${sseExpressRes.headersSent}`
-        );
-        console.log('[MCP Server - POST Detail] Transport and sseResponseObject seem valid for processing.');
-      } else {
-        console.warn(
-          `[MCP Server - POST Detail] Could not access underlying SSE Express Response object on transport for session ${sessionId} to check its state.`
-        );
-      }
-
-      res.on('finish', () => {
-        console.log(
-          `[MCP Server] Response for POST ${messagesPath} session ${sessionId} finished with status ${res.statusCode}`
-        );
-      });
-
-      try {
-        console.log(`[MCP Server] Calling activeTransport.handlePostMessage for session ${sessionId}`);
-        transport.handlePostMessage(req, res, req.body);
-        console.log(`[MCP Server] Returned from activeTransport.handlePostMessage for session ${sessionId}`);
-      } catch (e) {
-        console.error('[MCP Server] Error from transport.handlePostMessage:', e);
-        if (!res.headersSent) {
-          res.status(500).send('Error processing message');
-        }
-      }
-    });
+    // --- Connect McpServer to Transport (ONCE) --- 
+    console.log('[MCP Setup] Connecting single McpServer to main transport...');
+    // This is where McpServer internally sets up its listeners on the transport (e.g., transport.onmessage)
+    // to handle messages for all relevant sessions it's aware of.
+    await singleMcpServer.connect(mainTransportInstance);
+    console.log('[MCP Setup] Single McpServer connected to main transport.');
     
-    app.get('/', (req: Request, res: Response) => {
-      res.status(200).send('OpenGov MCP Server is running. MCP endpoint at /mcp/sse (GET for SSE) and /mcp/messages (POST for client messages).');
+    // We do NOT set mainTransportInstance.onmessage here.
+    // We rely on singleMcpServer.connect() to have configured the transport appropriately.
+
+    // Set general transport error/close handlers if needed for logging or global cleanup
+    mainTransportInstance.onerror = (error: Error) => {
+        console.error('[MCP Transport - onerror] Transport-level error:', error);
+    };
+    mainTransportInstance.onclose = () => {
+        console.log('[MCP Transport - onclose] Main transport connection closed/terminated by transport itself.');
+    };
+
+    // Start the transport (may be a no-op for streamableHttp, but good practice)
+    // Removed explicit mainTransportInstance.start() call here as McpServer.connect() handles it.
+
+    // --- Express Route --- 
+    app.all(mcpPath, async (req: Request, res: Response) => {
+      console.log(`[Express Route - ${req.method} ${mcpPath}] Forwarding request to main MCP transport.`);
+      if (!mainTransportInstance) {
+          console.error('[Express Route] Main transport not initialized! This should not happen.');
+          if (!res.headersSent) res.status(503).send('MCP Service Unavailable');
+          return;
+      }
+      try {
+        await mainTransportInstance.handleRequest(
+          req as IncomingMessage & { auth?: any }, 
+          res as ServerResponse, 
+          req.body
+        );
+      } catch (error) {
+        console.error(`[Express Route - ${mcpPath}] Error during transport.handleRequest:`, error);
+        if (!res.headersSent) {
+          res.status(500).send('Internal Server Error while handling MCP request.');
+        }
+      }
     });
 
-    app.listen(port, '0.0.0.0', () => {
-      console.log(`🚀 MCP server (using Express + SSE) listening on port ${port}. SSE at ${ssePath}, Messages at ${messagesPath}`);
+    app.get('/', (req: Request, res: Response) => {
+      res.status(200).send('OpenGov MCP Server is running. MCP endpoint at /mcp.');
     });
+
+    const httpServer = app.listen(port, '0.0.0.0', () => {
+      console.log(`🚀 MCP server (Single McpServer + Single Transport) listening on port ${port}. MCP endpoint at ${mcpPath}`);
+    });
+
+    const gracefulShutdown = async (signal: string) => {
+      console.log(`${signal} signal received: closing resources.`);
+      if (singleMcpServer) {
+        console.log('Closing McpServer...');
+        await singleMcpServer.close().catch(e => console.error('Error closing McpServer:', e));
+      }
+      if (mainTransportInstance) {
+        console.log('Closing main transport...');
+        await mainTransportInstance.close().catch(e => console.error('Error closing main transport:', e));
+      }
+      httpServer.close(() => {
+        console.log('HTTP server closed.');
+        process.exit(0);
+      });
+    };
+
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
   } catch (err) {
-    console.error('Fatal error starting Express app:', err);
+    console.error('Fatal error during application startup:', err);
+    if (singleMcpServer) {
+      await singleMcpServer.close().catch(e => console.error('Error closing McpServer during fatal startup error:', e));
+    }
+    if (mainTransportInstance) {
+      await mainTransportInstance.close().catch(e => console.error('Error closing main transport during fatal startup error:', e));
+    }
     process.exit(1);
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/* Entrypoint                                                                 */
-/* -------------------------------------------------------------------------- */
-startApp().catch((err) => {
-  console.error('[Fatal] Uncaught error during startup', err);
+startApp().catch(async (err) => { 
+  console.error('[Fatal] Uncaught error during startup process wrapper:', err);
   process.exit(1);
 });
