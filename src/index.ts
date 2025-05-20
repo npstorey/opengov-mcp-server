@@ -3,7 +3,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
-import type { Request, Response } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import dotenv from 'dotenv';
 import cors from 'cors';
@@ -74,40 +74,40 @@ async function startApp() {
     const app = express();
     
     // --- Middleware Setup ---
-    app.use(cors()); // Enable CORS for all origins and default settings
     app.use(express.json());
+
+    // Enable CORS for specific origins and pre-flight requests
+    app.use(cors({ 
+      origin: ['https://claude.ai', 'https://*.claude.ai', 'https://studio.claude.ai', 'http://localhost:3000', 'http://localhost:8000', 'http://localhost:10000'],
+      credentials: true 
+    }));
 
     const port = Number(process.env.PORT) || 8000;
     const mcpPath = '/mcp';
 
-    // --- Explicit CORS OPTIONS handler for /mcp ---
-    // Handles pre-flight requests for the /mcp endpoint.
-    app.options(mcpPath, cors()); 
+    // Explicitly handle OPTIONS requests for the /mcp path
+    app.options(mcpPath, cors()); // Enable pre-flight for /mcp (ensure cors() here is compatible with above or a simpler config)
 
-    // --- MCP Debug Logging Middleware ---
-    // Logs details of all incoming requests to /mcp.
-    app.all(mcpPath, (req: Request, _res: Response, next: express.NextFunction) => {
-      console.log(
-        `[MCP DEBUG] Incoming ${req.method} ${req.originalUrl}`,
-        { 
-          headers: req.headers,
-          body: req.body, // Log body as well, ensure express.json() is used before this
-          ip: req.ip
-        }
-      );
-      next();
+    // --- Dedicated Health Check Endpoint ---
+    app.get('/healthz', (_req: Request, res: Response) => {
+      console.log('[MCP Health] /healthz endpoint hit');
+      res.status(200).send('OK'); 
     });
 
-    // --- MCP GET Health Probe / Legacy Client Handler ---
-    // Responds to simple GET requests (potential health checks) that are not asking for SSE.
-    app.get(mcpPath, (req: Request, res: Response, next: express.NextFunction) => {
-      const acceptHeader = req.headers.accept;
-      if (!acceptHeader?.includes('text/event-stream')) {
-        console.log(`[MCP Health Probe] GET ${mcpPath} without 'text/event-stream' in Accept header. Responding 200 OK. Accept: '${acceptHeader}'`);
-        return res.status(200).json({ status: 'ok', message: 'MCP server is alive. This is a health check or non-SSE GET endpoint.' });
+    // --- MCP GET Handler (Probe/Legacy) ---
+    // Place this BEFORE app.all('/mcp', ...)
+    app.get(mcpPath, (req: Request, res: Response, next: NextFunction) => {
+      console.log(`[MCP DEBUG - GET /mcp Probe] Headers:`, JSON.stringify(req.headers, null, 2));
+      if (req.headers.accept?.includes('text/event-stream')) {
+        console.log('[MCP DEBUG - GET /mcp Probe] Looks like an SSE attempt, passing to main handler.');
+        return next(); 
       }
-      console.log(`[MCP Health Probe] GET ${mcpPath} with 'text/event-stream' in Accept header. Passing to main transport handler. Accept: '${acceptHeader}'`);
-      next(); // Fall through for legitimate SSE GET requests
+      if (!req.headers['mcp-session-id']) {
+        console.log('[MCP DEBUG - GET /mcp Probe] Simple GET probe or incorrect initial request. Responding 200 OK.');
+        return res.status(200).json({ status: 'ok', message: 'MCP server is alive. Please use POST for MCP operations.' });
+      }
+      console.log('[MCP DEBUG - GET /mcp Probe] GET with session ID, passing to main handler.');
+      next();
     });
 
     // --- Create Single Transport Instance --- 
@@ -147,9 +147,16 @@ async function startApp() {
     // Start the transport (may be a no-op for streamableHttp, but good practice)
     // Removed explicit mainTransportInstance.start() call here as McpServer.connect() handles it.
 
-    // --- Express Route --- 
+    // --- Express Route for MCP --- 
+    // This single handler will process all methods for /mcp AFTER specific GETs are handled above.
     app.all(mcpPath, async (req: Request, res: Response) => {
-      console.log(`[Express Route - ${req.method} ${mcpPath}] Forwarding request to main MCP transport (after debug log and GET probe).`);
+      // Add this at the very top of the handler:
+      console.log(
+        `[MCP DEBUG - app.all] INCOMING: ${req.method} ${req.originalUrl} from ${req.ip}`,
+        { headers: JSON.stringify(req.headers, null, 2), body: JSON.stringify(req.body, null, 2) }
+      );
+
+      console.log(`[Express Route - ${req.method} ${mcpPath}] Forwarding request to main MCP transport.`);
       if (!mainTransportInstance) {
           console.error('[Express Route] Main transport not initialized! This should not happen.');
           if (!res.headersSent) res.status(503).send('MCP Service Unavailable');
@@ -157,7 +164,7 @@ async function startApp() {
       }
       try {
         await mainTransportInstance.handleRequest(
-          req as IncomingMessage & { auth?: any }, 
+          req as IncomingMessage & { auth?: Record<string, unknown> | undefined }, 
           res as ServerResponse, 
           req.body
         );
@@ -174,7 +181,7 @@ async function startApp() {
     });
 
     const httpServer = app.listen(port, '0.0.0.0', () => {
-      console.log(`🚀 MCP server (Single McpServer + Single Transport) listening on port ${port}. MCP endpoint at ${mcpPath}`);
+      console.log(`🚀 MCP server (Single McpServer + Single Transport) listening on port ${port}. MCP endpoint at ${mcpPath}, Health at /healthz`);
     });
 
     const gracefulShutdown = async (signal: string) => {
