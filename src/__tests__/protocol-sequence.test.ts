@@ -1,14 +1,15 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import express from 'express';
 import type { Express } from 'express';
 import request from 'supertest';
-import EventSource from 'eventsource';
+import { EventSource } from 'eventsource';
+import type { Server as HttpServer } from 'node:http';
 
 describe('MCP Protocol Sequence', () => {
   let app: Express;
-  let server: any;
+  let server: HttpServer;
   let eventSource: EventSource;
   const PORT = 8001;
   const BASE_URL = `http://localhost:${PORT}`;
@@ -43,7 +44,7 @@ describe('MCP Protocol Sequence', () => {
       mcpServer.tool(
         'ping',
         'p',
-        vi.fn(), // Mock schema
+        {},
         async () => ({ content: [{ type: 'text', text: 'pong_minimal' }] })
       );
 
@@ -53,7 +54,7 @@ describe('MCP Protocol Sequence', () => {
 
       try {
         await mcpServer.connect(transport);
-      } catch (error) {
+      } catch (_error) {
         if (!res.headersSent) {
           res.status(500).send('Failed to establish MCP connection');
         }
@@ -81,7 +82,7 @@ describe('MCP Protocol Sequence', () => {
 
       try {
         transport.handlePostMessage(req, res, req.body);
-      } catch (e) {
+      } catch (_e) {
         if (!res.headersSent) {
           res.status(500).send('Error processing message');
         }

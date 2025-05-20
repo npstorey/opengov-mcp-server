@@ -9,8 +9,14 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import { UNIFIED_SOCRATA_TOOL, handleSocrataTool } from './tools/socrata-tools.js';
 import crypto from 'crypto';
+import { z } from 'zod';
 
 dotenv.config();
+
+// Define context type based on global.d.ts for clarity
+type McpToolHandlerContext = { sendNotification(method: string, params?: Record<string, unknown>): Promise<void> };
+// Infer params type from the Zod schema
+type SocrataToolParams = z.infer<typeof UNIFIED_SOCRATA_TOOL.inputSchema>;
 
 // Simplified: creates and configures an McpServer instance, does NOT connect it.
 async function createMcpServerInstance(): Promise<McpServer> {
@@ -26,18 +32,19 @@ async function createMcpServerInstance(): Promise<McpServer> {
     UNIFIED_SOCRATA_TOOL.name,
     UNIFIED_SOCRATA_TOOL.description,
     UNIFIED_SOCRATA_TOOL.inputSchema as any,
-    async (params: any, context: any) => {
+    async (params: SocrataToolParams, _context: McpToolHandlerContext) => {
       console.log(
         `[MCP Server - ${UNIFIED_SOCRATA_TOOL.name}] tool called with params:`,
         params
       );
       try {
-        const result = await handleSocrataTool(params);
+        const result = await handleSocrataTool(params as Record<string, unknown>);
         return { content: [{ type: 'json', json: result }], isError: false };
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error(`[MCP Server - ${UNIFIED_SOCRATA_TOOL.name}] Error:`, error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
         return {
-          content: [{ type: 'text', text: `Error in ${UNIFIED_SOCRATA_TOOL.name}: ${error.message}` }],
+          content: [{ type: 'text', text: `Error in ${UNIFIED_SOCRATA_TOOL.name}: ${errorMessage}` }],
           isError: true,
         };
       }
@@ -72,6 +79,36 @@ async function startApp() {
 
     const port = Number(process.env.PORT) || 8000;
     const mcpPath = '/mcp';
+
+    // --- Explicit CORS OPTIONS handler for /mcp ---
+    // Handles pre-flight requests for the /mcp endpoint.
+    app.options(mcpPath, cors()); 
+
+    // --- MCP Debug Logging Middleware ---
+    // Logs details of all incoming requests to /mcp.
+    app.all(mcpPath, (req: Request, _res: Response, next: express.NextFunction) => {
+      console.log(
+        `[MCP DEBUG] Incoming ${req.method} ${req.originalUrl}`,
+        { 
+          headers: req.headers,
+          body: req.body, // Log body as well, ensure express.json() is used before this
+          ip: req.ip
+        }
+      );
+      next();
+    });
+
+    // --- MCP GET Health Probe / Legacy Client Handler ---
+    // Responds to simple GET requests (potential health checks) that are not asking for SSE.
+    app.get(mcpPath, (req: Request, res: Response, next: express.NextFunction) => {
+      const acceptHeader = req.headers.accept;
+      if (!acceptHeader?.includes('text/event-stream')) {
+        console.log(`[MCP Health Probe] GET ${mcpPath} without 'text/event-stream' in Accept header. Responding 200 OK. Accept: '${acceptHeader}'`);
+        return res.status(200).json({ status: 'ok', message: 'MCP server is alive. This is a health check or non-SSE GET endpoint.' });
+      }
+      console.log(`[MCP Health Probe] GET ${mcpPath} with 'text/event-stream' in Accept header. Passing to main transport handler. Accept: '${acceptHeader}'`);
+      next(); // Fall through for legitimate SSE GET requests
+    });
 
     // --- Create Single Transport Instance --- 
     console.log('[MCP Setup] Creating main StreamableHTTPServerTransport instance...');
@@ -112,7 +149,7 @@ async function startApp() {
 
     // --- Express Route --- 
     app.all(mcpPath, async (req: Request, res: Response) => {
-      console.log(`[Express Route - ${req.method} ${mcpPath}] Forwarding request to main MCP transport.`);
+      console.log(`[Express Route - ${req.method} ${mcpPath}] Forwarding request to main MCP transport (after debug log and GET probe).`);
       if (!mainTransportInstance) {
           console.error('[Express Route] Main transport not initialized! This should not happen.');
           if (!res.headersSent) res.status(503).send('MCP Service Unavailable');

@@ -76,7 +76,7 @@ declare module '@modelcontextprotocol/sdk/server/streamableHttp.js' {
   type ServerResponse = import('node:http').ServerResponse;
   type JSONRPCMessage = any; // Add a basic type for JSONRPCMessage
   type RequestId = string | number | null; // Basic type for RequestId
-  type AuthInfo = any; // Basic type for AuthInfo
+  type AuthInfo = Record<string, unknown> | undefined; // Changed from any
 
   // Based on StreamableHTTPServerTransport.d.ts
   export interface StreamableHTTPServerTransportOptions {
