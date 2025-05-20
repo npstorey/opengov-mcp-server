@@ -123,10 +123,7 @@ async function startApp() {
     mainTransportInstance = new StreamableHTTPServerTransport({
       sessionIdGenerator: generateSessionId,
       onsessioninitialized: (sessionId: string) => {
-        // This callback is primarily for the transport to signal session activity.
-        // We no longer create McpServer instances here.
-        // The single McpServer will handle all sessions through the connected transport.
-        console.log(`[MCP Transport - onsessioninitialized] Session activity detected/initialized: ${sessionId}`);
+        console.log('[MCP Transport] Session initialized:', sessionId);
       },
     });
 
@@ -173,8 +170,7 @@ async function startApp() {
         // The req.body should already be parsed by the global express.json()
         await mainTransportInstance.handleRequest(
           req as IncomingMessage & { auth?: Record<string, unknown> | undefined }, 
-          res as ServerResponse, 
-          req.body 
+          res as ServerResponse
         );
       } catch (error) {
         console.error(`[Express Route - ${mcpPath}] Error during transport.handleRequest:`, error);
