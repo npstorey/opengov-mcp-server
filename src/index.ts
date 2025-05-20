@@ -4,13 +4,13 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import express from 'express';
 import type { Request, Response } from 'express'; // Import Express types for better type safety
-import { z } from 'zod';
 import dotenv from 'dotenv';
+import { UNIFIED_SOCRATA_TOOL, handleSocrataTool } from './tools/socrata-tools.js';
 dotenv.config();
 
 async function createMcpServerInstance(): Promise<McpServer> {
   console.log(
-    '[MCP Server Factory] Creating new McpServer instance and registering simple_ping tool.'
+    '[MCP Server Factory] Creating new McpServer instance and registering UNIFIED_SOCRATA_TOOL.'
   );
 
   const serverInstance = new McpServer(
@@ -25,24 +25,35 @@ async function createMcpServerInstance(): Promise<McpServer> {
     }
   );
 
-  // Register the simple_ping tool
+  // Register UNIFIED_SOCRATA_TOOL
+  // IMPORTANT ASSUMPTION: UNIFIED_SOCRATA_TOOL.inputSchema will be made a Zod schema object.
+  // If it's still a JSON schema object from socrata-tools.ts, this will fail at runtime
+  // or cause the same '_def' error.
   serverInstance.tool(
-    'simple_ping',
-    'A very simple ping tool to check if the server is responding to tool calls.',
-    z.any(),
+    UNIFIED_SOCRATA_TOOL.name,
+    UNIFIED_SOCRATA_TOOL.description,
+    UNIFIED_SOCRATA_TOOL.inputSchema as any, // Temporarily cast, expecting it to be Zod
     async (params: any, context: any) => {
       console.log(
-        '[MCP Server - SimplePingTool] simple_ping tool called with params:',
+        `[MCP Server - ${UNIFIED_SOCRATA_TOOL.name}] tool called with params:`,
         params
       );
-      return {
-        content: [{ type: 'text', text: 'pong' }],
-        isError: false,
-      };
+      try {
+        const result = await handleSocrataTool(params);
+        // Ensure the result is in the expected format: { content: [], isError?: boolean }
+        // handleSocrataTool likely returns the data directly, so we need to wrap it.
+        return { content: [{ type: 'json', json: result }], isError: false }; // Or infer type if possible
+      } catch (error: any) {
+        console.error(`[MCP Server - ${UNIFIED_SOCRATA_TOOL.name}] Error:`, error);
+        return {
+          content: [{ type: 'text', text: `Error in ${UNIFIED_SOCRATA_TOOL.name}: ${error.message}` }],
+          isError: true
+        };
+      }
     }
   );
 
-  console.log('[MCP Server Factory] simple_ping tool successfully registered.');
+  console.log('[MCP Server Factory] UNIFIED_SOCRATA_TOOL successfully registered.');
 
   const serverWithErrorHandler = serverInstance as unknown as {
     onError?: (cb: (error: Error) => void) => void;
@@ -53,9 +64,6 @@ async function createMcpServerInstance(): Promise<McpServer> {
     });
   }
 
-  console.log(
-    '[MCP Server Factory] McpServer instance created, registering simple_ping tool.'
-  );
   return serverInstance;
 }
 

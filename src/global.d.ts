@@ -48,15 +48,12 @@ declare module '@modelcontextprotocol/sdk/server/sse.js' {
 }
 
 declare module '@modelcontextprotocol/sdk/types.js' {
+  import { ZodTypeAny } from 'zod';
+
   export interface Tool {
     name: string;
     description: string;
-    inputSchema: {
-      type: 'object';
-      properties: Record<string, any>; // Be more specific if possible
-      required?: string[];
-      additionalProperties?: boolean;
-    };
+    inputSchema: ZodTypeAny;
   }
   export const CallToolRequestSchema: any; // Or a more specific type based on SDK
   export const ListToolsRequestSchema: any; // Or a more specific type

@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { Tool } from '@modelcontextprotocol/sdk/types.js'; // Suffix needed
 import {
   fetchFromSocrataApi,
@@ -248,131 +249,70 @@ async function handleSiteMetrics(params: {
 
 // Consolidated Socrata tool
 export const UNIFIED_SOCRATA_TOOL: Tool = {
-  name: 'get_data',
-  description: 'Access data and metadata to learn more about the city and its underlying information.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      type: {
-        type: 'string',
-        enum: ['catalog', 'categories', 'tags', 'dataset-metadata', 'column-info', 'data-access', 'site-metrics'],
-        description: 'The type of operation to perform:' +
-          '\n- catalog: List datasets with optional search' +
-          '\n- categories: List all dataset categories' +
-          '\n- tags: List all dataset tags' +
-          '\n- dataset-metadata: Get detailed metadata for a specific dataset' +
-          '\n- column-info: Get column details for a specific dataset' +
-          '\n- data-access: Access records from a dataset (with query support)' +
-          '\n- site-metrics: Get portal-wide statistics',
-      },
-      domain: {
-        type: 'string',
-        description: 'Optional domain (hostname only, without protocol). Used with all operation types.',
-      },
-      // Search and query parameters
-      query: {
-        type: 'string',
-        description: 'Search or query string with different uses depending on operation type:' +
-          '\n- For type=catalog: Search query to filter datasets' +
-          '\n- For type=data-access: SoQL query string for complex data filtering',
-      },
-      // Dataset specific parameters
-      datasetId: {
-        type: 'string',
-        description: 'Dataset identifier required for the following operations:' +
-          '\n- For type=dataset-metadata: Get dataset details' +
-          '\n- For type=column-info: Get column information' +
-          '\n- For type=data-access: Specify which dataset to query (e.g., 6zsd-86xi)',
-      },
-      // Data access specific parameters
-      soqlQuery: {
-        type: 'string',
-        description: 'For type=data-access only. Optional SoQL query string for filtering data.' +
-          '\nThis is an alias for the query parameter and takes precedence if both are provided.',
-      },
-      // Additional SoQL parameters for data-access
-      select: {
-        type: 'string',
-        description: 'For type=data-access only. Specifies which columns to return in the result set.',
-      },
-      where: {
-        type: 'string',
-        description: 'For type=data-access only. Filters the rows to be returned (e.g., "magnitude > 3.0").',
-      },
-      order: {
-        type: 'string',
-        description: 'For type=data-access only. Orders the results based on specified columns (e.g., "date DESC").',
-      },
-      group: {
-        type: 'string',
-        description: 'For type=data-access only. Groups results for aggregate functions.',
-      },
-      having: {
-        type: 'string',
-        description: 'For type=data-access only. Filters for grouped results, similar to where but for grouped data.',
-      },
-      // Full-text search parameter
-      q: {
-        type: 'string',
-        description: 'For type=data-access only. Full text search parameter for free-text searching across the dataset.',
-      },
-      // Pagination parameters
-      limit: {
-        type: 'number',
-        description: 'Maximum number of results to return:' +
-          '\n- For type=catalog: Limits dataset results' +
-          '\n- For type=data-access: Limits data records returned',
-        default: 10,
-      },
-      offset: {
-        type: 'number',
-        description: 'Number of results to skip for pagination:' +
-          '\n- For type=catalog: Skips dataset results' +
-          '\n- For type=data-access: Skips data records for pagination',
-        default: 0,
-      },
-    },
-    required: ['type'],
-    additionalProperties: false,
-  },
+  name: 'unified_socrata_tool',
+  description: 'A unified tool to interact with Socrata open data portals. It can search the data catalog, get metadata about datasets and columns, retrieve categories and tags, access data using SoQL queries, and fetch site metrics.',
+  inputSchema: z.any()
 };
 
-// Main handler for the unified tool that routes to the appropriate function
+// Main handler function that dispatches to specific handlers based on type
 export async function handleSocrataTool(params: Record<string, unknown>): Promise<unknown> {
-  const { type } = params;
+  const type = params.type as string;
+  const typedParams = params as any; // Cast to any to avoid excessive type checking here, validation is done by Zod
+
+  // Ensure a default domain is set if not provided, applicable to most handlers
+  if (!typedParams.domain) {
+    typedParams.domain = getDefaultDomain();
+  }
+  if (!typedParams.domain && ['catalog', 'categories', 'tags', 'dataset-metadata', 'column-info', 'data-access', 'site-metrics'].includes(type)) {
+    // For types that absolutely require a domain (either user-provided or default from .env)
+    // and getDefaultDomain() returned undefined (meaning .env variable is not set)
+    throw new Error('Domain parameter is required for this operation type and no default DATA_PORTAL_URL is configured.');
+  }
+
+  // Set defaults for limit and offset if not provided, applicable to relevant handlers
+  if (typedParams.limit === undefined && (type === 'catalog' || type === 'data-access')) {
+    typedParams.limit = 10;
+  }
+  if (typedParams.offset === undefined && (type === 'catalog' || type === 'data-access')) {
+    typedParams.offset = 0;
+  }
 
   switch (type) {
     case 'catalog':
-      return handleCatalog(params as { query?: string; domain?: string; limit?: number; offset?: number });
+      return handleCatalog(typedParams as {
+        query?: string;
+        domain?: string;
+        limit?: number;
+        offset?: number;
+      });
     case 'categories':
-      return handleCategories(params as { domain?: string });
+      return handleCategories(typedParams as { domain?: string });
     case 'tags':
-      return handleTags(params as { domain?: string });
+      return handleTags(typedParams as { domain?: string });
     case 'dataset-metadata':
-      // Validate required parameters
-      if (!params.datasetId) {
-        throw new Error('datasetId is required for dataset-metadata operation');
+      if (!typedParams.datasetId) {
+        throw new Error('datasetId is required for type=dataset-metadata');
       }
-      return handleDatasetMetadata(params as { datasetId: string; domain?: string });
-    case 'column-info':
-      // Validate required parameters
-      if (!params.datasetId) {
-        throw new Error('datasetId is required for column-info operation');
-      }
-      return handleColumnInfo(params as { datasetId: string; domain?: string });
-    case 'data-access':
-      // Validate required parameters
-      if (!params.datasetId) {
-        throw new Error('datasetId is required for data-access operation');
-      }
-      // Map soqlQuery to query for consistency with the handler
-      if (params.soqlQuery) {
-        params.query = params.soqlQuery;
-      }
-      return handleDataAccess(params as {
+      return handleDatasetMetadata(typedParams as {
         datasetId: string;
         domain?: string;
-        query?: string;
+      });
+    case 'column-info':
+      if (!typedParams.datasetId) {
+        throw new Error('datasetId is required for type=column-info');
+      }
+      return handleColumnInfo(typedParams as {
+        datasetId: string;
+        domain?: string;
+      });
+    case 'data-access':
+      if (!typedParams.datasetId) {
+        throw new Error('datasetId is required for type=data-access');
+      }
+      return handleDataAccess(typedParams as {
+        datasetId: string;
+        domain?: string;
+        query?: string; // This refers to the simple 'q' text search if soqlQuery is not used
         limit?: number;
         offset?: number;
         select?: string;
@@ -380,12 +320,13 @@ export async function handleSocrataTool(params: Record<string, unknown>): Promis
         order?: string;
         group?: string;
         having?: string;
-        q?: string;
+        q?: string; // This is the specific Socrata param for full-text search if soqlQuery not used.
+        soqlQuery?: string; // The comprehensive SoQL query.
       });
     case 'site-metrics':
-      return handleSiteMetrics(params as { domain?: string });
+      return handleSiteMetrics(typedParams as { domain?: string });
     default:
-      throw new Error(`Unknown operation type: ${type}`);
+      throw new Error(`Unknown Socrata operation type: ${type}`);
   }
 }
 
