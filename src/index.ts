@@ -5,6 +5,8 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import express from 'express';
 import type { Request, Response } from 'express'; // Import Express types for better type safety
 import { z } from 'zod';
+import dotenv from 'dotenv';
+dotenv.config();
 
 async function createMcpServerInstance(): Promise<McpServer> {
   console.log(
