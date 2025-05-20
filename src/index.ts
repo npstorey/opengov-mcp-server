@@ -6,6 +6,7 @@ import express from 'express';
 import type { Request, Response } from 'express';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import dotenv from 'dotenv';
+import cors from 'cors';
 import { UNIFIED_SOCRATA_TOOL, handleSocrataTool } from './tools/socrata-tools.js';
 import crypto from 'crypto';
 
@@ -64,6 +65,9 @@ async function startApp() {
 
   try {
     const app = express();
+    
+    // --- Middleware Setup ---
+    app.use(cors()); // Enable CORS for all origins and default settings
     app.use(express.json());
 
     const port = Number(process.env.PORT) || 8000;
