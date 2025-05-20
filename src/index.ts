@@ -110,6 +110,26 @@ async function startApp() {
       next();
     });
 
+    // --- New MCP POST Request Session Header Enforcement ---
+    app.post(mcpPath, (req: Request, res: Response, next: NextFunction) => {
+      // If it's the initialize call, let it through without a session header.
+      if (req.body?.method === 'initialize') {
+        console.log('[MCP POST Middleware] Initialize call detected, allowing without Mcp-Session-Id.');
+        return next();
+      }
+    
+      // Otherwise, enforce the header:
+      if (!req.headers['mcp-session-id']) {
+        console.warn('[MCP POST Middleware] Mcp-Session-Id header is missing for non-initialize POST request.');
+        return res
+          .status(400)
+          .json({ jsonrpc: '2.0', error: { code: -32000, message: 'Bad Request: Mcp-Session-Id header is required' } });
+      }
+      
+      console.log('[MCP POST Middleware] Mcp-Session-Id header present or not required. Passing to next handler.');
+      next();
+    });
+
     // --- Create Single Transport Instance --- 
     console.log('[MCP Setup] Creating main StreamableHTTPServerTransport instance...');
     mainTransportInstance = new StreamableHTTPServerTransport({
