@@ -94,40 +94,35 @@ async function startApp() {
       res.status(200).send('OK'); 
     });
 
-    // --- MCP GET Handler (Probe/Legacy) ---
-    // Place this BEFORE app.all('/mcp', ...)
-    app.get(mcpPath, (req: Request, res: Response, next: NextFunction) => {
-      console.log(`[MCP DEBUG - GET /mcp Probe] Headers:`, JSON.stringify(req.headers, null, 2));
-      if (req.headers.accept?.includes('text/event-stream')) {
-        console.log('[MCP DEBUG - GET /mcp Probe] Looks like an SSE attempt, passing to main handler.');
-        return next(); 
+    // --- MCP POST Request Session Header Enforcement (Order: 2) ---
+    // Placed before the GET handler and the main app.all handler.
+    app.post(mcpPath, (req: Request, res: Response, next: NextFunction) => { // express.json() removed from here, relying on global
+      console.log('[MCP POST Middleware] Checking session requirements...');
+      if (req.body?.method === 'initialize') {
+        console.log('[MCP POST Middleware] Initialize call, bypassing session ID check.');
+        return next();
       }
       if (!req.headers['mcp-session-id']) {
-        console.log('[MCP DEBUG - GET /mcp Probe] Simple GET probe or incorrect initial request. Responding 200 OK.');
-        return res.status(200).json({ status: 'ok', message: 'MCP server is alive. Please use POST for MCP operations.' });
+        console.warn('[MCP POST Middleware] Mcp-Session-Id header missing for non-initialize POST.');
+        return res.status(400).json({
+          jsonrpc: '2.0',
+          error: { code: -32000, message: 'Bad Request: Mcp-Session-Id header is required' }
+        });
       }
-      console.log('[MCP DEBUG - GET /mcp Probe] GET with session ID, passing to main handler.');
+      console.log('[MCP POST Middleware] Mcp-Session-Id header present or initialize call. Proceeding...');
       next();
     });
 
-    // --- New MCP POST Request Session Header Enforcement ---
-    app.post(mcpPath, express.json(), (req: Request, res: Response, next: NextFunction) => {
-      // If it's the initialize call, let it through without a session header.
-      if (req.body?.method === 'initialize') {
-        console.log('[MCP POST Middleware] Initialize call detected, allowing without Mcp-Session-Id.');
-        return next();
+    // --- MCP GET Handler (SSE health-probe/shim - Order: 3) ---
+    // Placed after POST session enforcement and before the main app.all handler.
+    app.get(mcpPath, (req: Request, res: Response, next: NextFunction) => {
+      console.log(`[MCP DEBUG - GET /mcp Probe Simplified] Headers:`, JSON.stringify(req.headers, null, 2));
+      if (!req.headers.accept?.includes('text/event-stream')) {
+        console.log('[MCP DEBUG - GET /mcp Probe Simplified] Not an event-stream request. Responding 200 OK.');
+        return res.status(200).send('OK'); // Simplified response
       }
-    
-      // Otherwise, enforce the header:
-      if (!req.headers['mcp-session-id']) {
-        console.warn('[MCP POST Middleware] Mcp-Session-Id header is missing for non-initialize POST request.');
-        return res
-          .status(400)
-          .json({ jsonrpc: '2.0', error: { code: -32000, message: 'Bad Request: Mcp-Session-Id header is required' } });
-      }
-      
-      console.log('[MCP POST Middleware] Mcp-Session-Id header present or not required. Passing to next handler.');
-      next();
+      console.log('[MCP DEBUG - GET /mcp Probe Simplified] Event-stream request, passing to main handler.');
+      next(); // Fall through for legitimate SSE GET requests or further handling by app.all
     });
 
     // --- Create Single Transport Instance --- 
