@@ -73,10 +73,10 @@ async function startApp() {
   try {
     const app = express();
     
-    // --- Middleware Setup ---
+    // 1) Global JSON body parser (must run before any /mcp handlers)
     app.use(express.json());
 
-    // Enable CORS for specific origins and pre-flight requests
+    // Re-adding global CORS policy for Claude web client and other origins
     app.use(cors({ 
       origin: ['https://claude.ai', 'https://*.claude.ai', 'https://studio.claude.ai', 'http://localhost:3000', 'http://localhost:8000', 'http://localhost:10000'],
       credentials: true 
@@ -85,44 +85,37 @@ async function startApp() {
     const port = Number(process.env.PORT) || 8000;
     const mcpPath = '/mcp';
 
-    // Explicitly handle OPTIONS requests for the /mcp path
-    app.options(mcpPath, cors()); // Enable pre-flight for /mcp (ensure cors() here is compatible with above or a simpler config)
+    // 1) OPTIONS /mcp (CORS preflight)
+    // Assuming cors() here means default CORS settings for the OPTIONS request
+    app.options(mcpPath, cors());
 
-    // --- Dedicated Health Check Endpoint ---
+    // 2) Health check
     app.get('/healthz', (_req: Request, res: Response) => {
-      console.log('[MCP Health] /healthz endpoint hit');
-      res.status(200).send('OK'); 
+      console.log('[MCP Health] /healthz endpoint hit - v2'); // Added v2 for clarity during transition
+      res.sendStatus(200);
     });
 
-    // --- MCP POST Request Session Header Enforcement (Order: 2) ---
-    // Placed before the GET handler and the main app.all handler.
-    app.post(mcpPath, (req: Request, res: Response, next: NextFunction) => { // express.json() removed from here, relying on global
-      console.log('[MCP POST Middleware] Checking session requirements...');
+    // 3) POST /mcp: allow initialize, enforce session on everything else
+    app.post(mcpPath, (req: Request, res: Response, next: NextFunction) => {
+      console.log('[MCP POST] method=', req.body?.method);
       if (req.body?.method === 'initialize') {
-        console.log('[MCP POST Middleware] Initialize call, bypassing session ID check.');
         return next();
       }
       if (!req.headers['mcp-session-id']) {
-        console.warn('[MCP POST Middleware] Mcp-Session-Id header missing for non-initialize POST.');
-        return res.status(400).json({
-          jsonrpc: '2.0',
-          error: { code: -32000, message: 'Bad Request: Mcp-Session-Id header is required' }
-        });
+        return res.status(400).json({ jsonrpc: '2.0', error: { code: -32000, message: 'Mcp-Session-Id required' } });
       }
-      console.log('[MCP POST Middleware] Mcp-Session-Id header present or initialize call. Proceeding...');
       next();
     });
 
-    // --- MCP GET Handler (SSE health-probe/shim - Order: 3) ---
-    // Placed after POST session enforcement and before the main app.all handler.
+    // 4) GET /mcp shim for non-SSE probes
     app.get(mcpPath, (req: Request, res: Response, next: NextFunction) => {
-      console.log(`[MCP DEBUG - GET /mcp Probe Simplified] Headers:`, JSON.stringify(req.headers, null, 2));
+      console.log(`[MCP DEBUG - GET /mcp Probe V2] Headers:`, JSON.stringify(req.headers, null, 2)); // Added V2
       if (!req.headers.accept?.includes('text/event-stream')) {
-        console.log('[MCP DEBUG - GET /mcp Probe Simplified] Not an event-stream request. Responding 200 OK.');
-        return res.status(200).send('OK'); // Simplified response
+        console.log('[MCP DEBUG - GET /mcp Probe V2] Not an event-stream request. Responding 200 OK (sendStatus).');
+        return res.sendStatus(200);
       }
-      console.log('[MCP DEBUG - GET /mcp Probe Simplified] Event-stream request, passing to main handler.');
-      next(); // Fall through for legitimate SSE GET requests or further handling by app.all
+      console.log('[MCP DEBUG - GET /mcp Probe V2] Event-stream request, passing to main handler.');
+      next();
     });
 
     // --- Create Single Transport Instance --- 
@@ -162,26 +155,26 @@ async function startApp() {
     // Start the transport (may be a no-op for streamableHttp, but good practice)
     // Removed explicit mainTransportInstance.start() call here as McpServer.connect() handles it.
 
-    // --- Express Route for MCP --- 
-    // This single handler will process all methods for /mcp AFTER specific GETs are handled above.
+    // 5) Finally, forward everything to the transport
     app.all(mcpPath, async (req: Request, res: Response) => {
-      // Add this at the very top of the handler:
-      console.log(
-        `[MCP DEBUG - app.all] INCOMING: ${req.method} ${req.originalUrl} from ${req.ip}`,
-        { headers: JSON.stringify(req.headers, null, 2), body: JSON.stringify(req.body, null, 2) }
-      );
+      // Removed previous detailed logging from inside this specific app.all handler
+      // console.log(
+      //   `[MCP DEBUG - app.all] INCOMING: ${req.method} ${req.originalUrl} from ${req.ip}`,
+      //   { headers: JSON.stringify(req.headers, null, 2), body: JSON.stringify(req.body, null, 2) }
+      // );
 
-      console.log(`[Express Route - ${req.method} ${mcpPath}] Forwarding request to main MCP transport.`);
+      // console.log(`[Express Route - ${req.method} ${mcpPath}] Forwarding request to main MCP transport.`); // This log also becomes redundant due to above middleware logging
       if (!mainTransportInstance) {
           console.error('[Express Route] Main transport not initialized! This should not happen.');
           if (!res.headersSent) res.status(503).send('MCP Service Unavailable');
           return;
       }
       try {
+        // The req.body should already be parsed by the global express.json()
         await mainTransportInstance.handleRequest(
           req as IncomingMessage & { auth?: Record<string, unknown> | undefined }, 
           res as ServerResponse, 
-          req.body
+          req.body 
         );
       } catch (error) {
         console.error(`[Express Route - ${mcpPath}] Error during transport.handleRequest:`, error);
