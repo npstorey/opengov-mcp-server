@@ -111,7 +111,7 @@ async function startApp() {
     });
 
     // --- New MCP POST Request Session Header Enforcement ---
-    app.post(mcpPath, (req: Request, res: Response, next: NextFunction) => {
+    app.post(mcpPath, express.json(), (req: Request, res: Response, next: NextFunction) => {
       // If it's the initialize call, let it through without a session header.
       if (req.body?.method === 'initialize') {
         console.log('[MCP POST Middleware] Initialize call detected, allowing without Mcp-Session-Id.');
