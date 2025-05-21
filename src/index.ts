@@ -54,6 +54,7 @@ async function createMcpServerInstance(): Promise<McpServer> {
       }
     }
   );
+  console.log('[DEBUG] Tool sent to client:', JSON.stringify(UNIFIED_SOCRATA_TOOL, null, 2));
   console.log('[MCP Server Factory] UNIFIED_SOCRATA_TOOL registered on instance.');
   
   // Error handling can be set on the internal server instance if needed, or McpServer itself if it exposes it.
