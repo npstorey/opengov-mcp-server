@@ -250,7 +250,8 @@ async function handleSiteMetrics(params: {
 // Consolidated Socrata tool
 export const UNIFIED_SOCRATA_TOOL: Tool = {
   name: 'get_data',
-  description: 'A unified tool to interact with Socrata open-data portals.',
+  description:
+    'A unified tool to interact with Socrata open-data portals.',
   parameters: z.object({
     type: z.enum(['catalog', 'metadata', 'query', 'metrics']),
     query: z.string().min(1)

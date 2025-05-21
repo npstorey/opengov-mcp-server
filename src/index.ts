@@ -37,8 +37,13 @@ async function createMcpServerInstance(): Promise<McpServer> {
         params
       );
       try {
-        const result = await handleSocrataTool(params as Record<string, unknown>);
-        return { content: [{ type: 'json', json: result }], isError: false };
+        // Call the handler from UNIFIED_SOCRATA_TOOL if it exists
+        if (UNIFIED_SOCRATA_TOOL.handler) {
+          const result = await UNIFIED_SOCRATA_TOOL.handler(params as Record<string, unknown>);
+          return { content: [{ type: 'json', json: result }], isError: false };
+        } else {
+          throw new Error ('Tool handler not defined for UNIFIED_SOCRATA_TOOL');
+        }
       } catch (error: unknown) {
         console.error(`[MCP Server - ${UNIFIED_SOCRATA_TOOL.name}] Error:`, error);
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -71,14 +76,14 @@ async function startApp() {
 
   try {
     const app = express();
+    app.use(express.json()); // Ensure this is at the very top
     
-    // Enable CORS with exposed session header
-    app.use(cors({
-      origin: true,          // or your explicit allow-list
-      credentials: true,
-      exposedHeaders: ['mcp-session-id']   // allow browsers to read it
+    // Global CORS policy
+    app.use(cors({ 
+      origin: true, 
+      credentials: true, 
+      exposedHeaders: ['mcp-session-id'] 
     }));
-    
     app.options('/mcp', cors({ origin: true, credentials: true }));
 
     const port = Number(process.env.PORT) || 8000;
