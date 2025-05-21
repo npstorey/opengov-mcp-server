@@ -76,9 +76,9 @@ async function startApp() {
 
   try {
     const app = express();
-    app.use(express.json()); // Ensure this is at the very top
+    // app.use(express.json()); // Removed as per instructions, no other JSON routes need it before /mcp
     
-    // Global CORS policy
+    /* ── 1.  CORS comes first ─────────────────────────────── */
     app.use(cors({ 
       origin: true, 
       credentials: true, 
@@ -120,7 +120,7 @@ async function startApp() {
         console.log('[MCP Transport - onclose] Main transport connection closed/terminated by transport itself.');
     };
 
-    // --- Simplified Express Route for MCP (sole handler for /mcp) ---
+    /* ── 2.  NO express.json() before /mcp!  ───────────────── */
     app.all(mcpPath, (req: Request, res: Response) => {
       if (!mainTransportInstance) { // Keep this safety check
           console.error('[Express Route /mcp] Main transport not initialized! This should not happen.');
@@ -130,12 +130,14 @@ async function startApp() {
       mainTransportInstance.handleRequest(
         req as IncomingMessage & { auth?: Record<string, unknown> | undefined }, 
         res as ServerResponse
-        // No third argument (parsedBody), transport will handle parsing
       ).catch(err => {
-        console.error('[MCP Transport Error - app.all /mcp]', err);
-        if (!res.headersSent) res.status(500).send('MCP transport failure');
+        console.error('[transport]', err);
+        if (!res.headersSent) res.status(500).end();
       });
     });
+
+    /* ── 3.  Body-parser for everything ELSE ───────────────── */
+    // app.use(express.json()); // Not needed as no other routes require it
 
     app.get('/', (req: Request, res: Response) => {
       res.status(200).send('OpenGov MCP Server is running. MCP endpoint at /mcp.');
