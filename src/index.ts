@@ -16,7 +16,7 @@ dotenv.config();
 // Define context type based on global.d.ts for clarity
 type McpToolHandlerContext = { sendNotification(method: string, params?: Record<string, unknown>): Promise<void> };
 // Infer params type from the Zod schema
-type SocrataToolParams = z.infer<typeof UNIFIED_SOCRATA_TOOL.inputSchema>;
+type SocrataToolParams = z.infer<typeof UNIFIED_SOCRATA_TOOL.parameters>;
 
 // Simplified: creates and configures an McpServer instance, does NOT connect it.
 async function createMcpServerInstance(): Promise<McpServer> {
@@ -30,8 +30,7 @@ async function createMcpServerInstance(): Promise<McpServer> {
 
   serverInstance.tool(
     UNIFIED_SOCRATA_TOOL.name,
-    UNIFIED_SOCRATA_TOOL.description,
-    UNIFIED_SOCRATA_TOOL.inputSchema as any,
+    UNIFIED_SOCRATA_TOOL.parameters,
     async (params: SocrataToolParams, _context: McpToolHandlerContext) => {
       console.log(
         `[MCP Server - ${UNIFIED_SOCRATA_TOOL.name}] tool called with params:`,

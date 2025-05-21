@@ -256,7 +256,7 @@ export const UNIFIED_SOCRATA_TOOL: Tool = {
       .describe('Operation to perform'),
     query: z.string().min(1)
       .describe('Search term / dataset identifier')
-  }),
+  })
 };
 
 // Main handler function that dispatches to specific handlers based on type

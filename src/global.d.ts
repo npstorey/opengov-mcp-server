@@ -24,8 +24,7 @@ declare module '@modelcontextprotocol/sdk/server/mcp.js' {
     readonly server: Server;
     tool(
       name: string,
-      description: string,
-      inputSchema: import('zod').ZodTypeAny,
+      parameters: import('zod').ZodTypeAny,
       handler: (
         params: any,
         context: { sendNotification(method: string, params?: any): Promise<void> }
@@ -111,9 +110,8 @@ declare module '@modelcontextprotocol/sdk/types.js' {
 
   export interface Tool {
     name: string;
-    description: string;
-    inputSchema?: ZodTypeAny;
-    parameters?: ZodTypeAny;
+    description?: string;
+    parameters: ZodTypeAny;
   }
   export const CallToolRequestSchema: any; // Or a more specific type based on SDK
   export const ListToolsRequestSchema: any; // Or a more specific type
