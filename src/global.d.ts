@@ -15,6 +15,7 @@ declare namespace NodeJS {
 // The paths must exactly match your import statements including the .js suffix.
 
 declare module '@modelcontextprotocol/sdk/server/mcp.js' {
+  import { ZodTypeAny, z } from 'zod';
   type McpServerTransport = import('@modelcontextprotocol/sdk/server/streamableHttp.js').StreamableHTTPServerTransport;
   type JSONRPCMessage = any;
   type Server = import('@modelcontextprotocol/sdk/server/index.js').Server;
@@ -22,12 +23,12 @@ declare module '@modelcontextprotocol/sdk/server/mcp.js' {
   export class McpServer {
     constructor(meta: { name: string; version: string }, options?: import('@modelcontextprotocol/sdk/server/index.js').ServerOptions);
     readonly server: Server;
-    tool(
+    tool<P extends ZodTypeAny>(
       name: string,
-      parameters: import('zod').ZodTypeAny,
+      parameters: P,
       handler: (
-        params: any,
-        context: McpToolHandlerContext
+        params: z.infer<P>,
+        context?: McpToolHandlerContext
       ) => Promise<{ content: any[]; isError?: boolean }>
     ): void;
     sendLoggingMessage(log: { level: 'info' | 'error'; data: any }): void;
