@@ -31,15 +31,17 @@ async function createMcpServerInstance(): Promise<McpServer> {
   serverInstance.tool(
     UNIFIED_SOCRATA_TOOL.name,
     UNIFIED_SOCRATA_TOOL.parameters as unknown as z.ZodTypeAny,
-    async (params: SocrataToolParams, _context: McpToolHandlerContext) => {
+    async (paramsAsContext: SocrataToolParams, contextFromSdk: McpToolHandlerContext) => {
       console.log(
-        `[MCP Server - ${UNIFIED_SOCRATA_TOOL.name}] tool called with params:`,
-        params
+        `[MCP Server - ${UNIFIED_SOCRATA_TOOL.name}] tool called with params (actually context from SDK):`,
+        paramsAsContext
       );
+      console.log('[DEBUG] Second argument (contextFromSdk) in MCP handler:', JSON.stringify(contextFromSdk, null, 2));
+
       try {
         // Call the handler from UNIFIED_SOCRATA_TOOL if it exists
         if (UNIFIED_SOCRATA_TOOL.handler) {
-          const result = await UNIFIED_SOCRATA_TOOL.handler(params as Record<string, unknown>);
+          const result = await UNIFIED_SOCRATA_TOOL.handler(paramsAsContext as Record<string, unknown>);
           return { content: [{ type: 'json', json: result }], isError: false };
         } else {
           throw new Error ('Tool handler not defined for UNIFIED_SOCRATA_TOOL');
