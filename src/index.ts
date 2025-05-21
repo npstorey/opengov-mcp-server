@@ -73,28 +73,12 @@ async function startApp() {
   try {
     const app = express();
     
-    // Global CORS policy (remains)
-    app.use(cors({ 
-      origin: [
-        'https://claude.ai', 
-        'https://*.claude.ai', 
-        'https://studio.claude.ai', 
-        'http://localhost:3000', 
-        'http://localhost:8000', 
-        'http://localhost:10000',
-        'https://127.0.0.1:6274', // Added Inspector origin
-        'http://127.0.0.1:6274',   // Added Inspector origin
-        'https://inspect.mcp.garden',
-        'https://*.mcp.garden'      
-      ],
-      credentials: true 
-    }));
+    // Enable open CORS for testing
+    app.use(cors({ origin: true, credentials: true }));
+    app.options('/mcp', cors({ origin: true, credentials: true }));
 
     const port = Number(process.env.PORT) || 8000;
     const mcpPath = '/mcp';
-
-    // OPTIONS /mcp (CORS preflight - remains)
-    app.options(mcpPath, cors());
 
     // Health check (remains)
     app.get('/healthz', (_req: Request, res: Response) => {
