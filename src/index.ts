@@ -75,7 +75,16 @@ async function startApp() {
     
     // Global CORS policy (remains)
     app.use(cors({ 
-      origin: ['https://claude.ai', 'https://*.claude.ai', 'https://studio.claude.ai', 'http://localhost:3000', 'http://localhost:8000', 'http://localhost:10000'],
+      origin: [
+        'https://claude.ai', 
+        'https://*.claude.ai', 
+        'https://studio.claude.ai', 
+        'http://localhost:3000', 
+        'http://localhost:8000', 
+        'http://localhost:10000',
+        'https://127.0.0.1:6274', // Added Inspector origin
+        'http://127.0.0.1:6274'   // Added Inspector origin
+      ],
       credentials: true 
     }));
 
