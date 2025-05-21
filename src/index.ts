@@ -170,6 +170,38 @@ async function startApp() {
     const port = Number(process.env.PORT) || 8000;
     const mcpPath = '/mcp';
 
+    // Middleware to log raw body for /mcp POST requests
+    app.use(mcpPath, (req: Request, res: Response, next: NextFunction) => {
+      if (req.method === 'POST') {
+        // express.json() might have already consumed the body if it was placed before this.
+        // For raw body, ensure no body parser has run yet for this path or use a library like raw-body.
+        // However, since StreamableHTTPServerTransport expects to handle the raw request and parse body, 
+        // we might not have `req.body` here yet if express.json() is not used globally for /mcp.
+        // Let's assume req.body might be populated by a body parser if one runs before transport.handleRequest
+        // or let's try to capture chunks if no body parser has run.
+        
+        // If express.json() is NOT used before this for /mcp path, we can try to log chunks.
+        // If it IS used, req.body should be populated.
+        // Our setup currently does NOT use express.json() before the /mcp route handler.
+
+        let rawData = '';
+        req.on('data', (chunk) => {
+          rawData += chunk;
+        });
+        req.on('end', () => {
+          console.log(`[Express /mcp POST] Raw request body received: ${rawData}`);
+          // IMPORTANT: Re-assigning req.body here might be problematic if the stream is already consumed.
+          // This is for logging only. The transport will handle the stream again.
+          // To avoid consuming the stream, this approach is tricky. 
+          // A better way might be to use a middleware that buffers and re-streams, or use a specific body-parser for logging.
+
+          // For simplicity in this debugging step, let's assume the transport can re-handle if we log and pass through.
+          // This might break things but is for one-time inspection.
+        });
+      }
+      next();
+    });
+
     // Health check (remains)
     app.get('/healthz', (_req: Request, res: Response) => {
       console.log('[MCP Health] /healthz endpoint hit - v2');
@@ -212,6 +244,12 @@ async function startApp() {
 
     /* ── 2.  NO express.json() before /mcp!  ───────────────── */
     app.all(mcpPath, (req: Request, res: Response) => {
+      // The raw body logger middleware above should have logged POST bodies.
+      console.log(`[Express /mcp ${req.method}] route hit. Headers:`, JSON.stringify(req.headers, null, 2));
+      if (req.method === 'POST' && req.body) {
+          console.log('[Express /mcp POST] Parsed req.body (if any body-parser ran):', JSON.stringify(req.body, null, 2));
+      }
+
       if (!mainTransportInstance) { // Keep this safety check
           console.error('[Express Route /mcp] Main transport not initialized! This should not happen.');
           if (!res.headersSent) res.status(503).send('MCP Service Unavailable');
