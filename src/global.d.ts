@@ -115,19 +115,58 @@ declare module '@modelcontextprotocol/sdk/server/streamableHttp.js' {
 }
 
 declare module '@modelcontextprotocol/sdk/types.js' {
-  import { ZodTypeAny } from 'zod';
-  import { type JsonSchema7Type } from 'zod-to-json-schema'; // Import the JSON schema type
+  import { ZodTypeAny, z } from 'zod';
+  import { type JsonSchema7Type } from 'zod-to-json-schema';
+
+  // Base for all MCP requests, usually includes jsonrpc, id, method
+  // For simplicity in shimming, we'll keep it somewhat generic but hint at structure.
+  interface BaseMcpRequest {
+    jsonrpc: '2.0';
+    id: string | number;
+    method: string;
+    // params might vary or be optional for some base requests like notifications
+    params?: unknown; 
+  }
+
+  // Schema for ListTools parameters
+  const ListToolsParamsSchema: z.ZodOptional<z.ZodObject<{ // params can be an empty object or not present
+    // _meta?: z.ZodOptional<z.ZodObject<{ progressToken: z.ZodOptional<z.ZodAny> }>> // Example, adjust if known
+  }>>;
+
+  // Schema for the entire ListTools request
+  export const ListToolsRequestSchema: z.ZodObject<{
+    jsonrpc: z.ZodLiteral<'2.0'>,
+    id: z.ZodUnion<[z.ZodString, z.ZodNumber]>,
+    method: z.ZodLiteral<'tools/list'>,
+    params: typeof ListToolsParamsSchema
+  }>;
+
+  // Schema for CallTool parameters (the content of jsonrpc.params)
+  const CallToolParamsSchema: z.ZodObject<{
+    name: z.ZodString,
+    arguments: z.ZodAny, // The actual tool arguments, can be any JSON structure
+    sessionId: z.ZodOptional<z.ZodString>,
+    // _meta?: z.ZodOptional<z.ZodObject<{ progressToken: z.ZodOptional<z.ZodAny> }>> // Example, adjust if known
+  }>;
+
+  // Schema for the entire CallTool request
+  export const CallToolRequestSchema: z.ZodObject<{
+    jsonrpc: z.ZodLiteral<'2.0'>,
+    id: z.ZodUnion<[z.ZodString, z.ZodNumber]>,
+    method: z.ZodLiteral<'tools/call'>,
+    params: typeof CallToolParamsSchema 
+  }>;
 
   export interface Tool {
     name: string;
     description?: string;
-    parameters: JsonSchema7Type; // Changed to JsonSchema7Type
-    handler?: (params: Record<string, unknown>) => Promise<unknown>;
+    parameters: JsonSchema7Type; // This is the JSON Schema for UI and client understanding
+    inputSchema?: JsonSchema7Type; // For MCP Inspector v0.8.2 compatibility
+    handler?: (params: Record<string, unknown>) => Promise<unknown>; // Actual handler in socrata-tools.ts
   }
-  export const CallToolRequestSchema: any; // Or a more specific type based on SDK
-  export const ListToolsRequestSchema: any; // Or a more specific type
+  
   export function isInitializeRequest(body: any): boolean;
-  // Add any other types/exports from '.../types.js'.
+  // Add any other types/exports from '.../types.js' if needed.
 }
 
 // Define McpToolHandlerContext globally so it can be used across files
