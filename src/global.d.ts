@@ -27,7 +27,7 @@ declare module '@modelcontextprotocol/sdk/server/mcp.js' {
       parameters: import('zod').ZodTypeAny,
       handler: (
         params: any,
-        context: { sendNotification(method: string, params?: any): Promise<void> }
+        context: McpToolHandlerContext
       ) => Promise<{ content: any[]; isError?: boolean }>
     ): void;
     sendLoggingMessage(log: { level: 'info' | 'error'; data: any }): void;
@@ -119,5 +119,12 @@ declare module '@modelcontextprotocol/sdk/types.js' {
   export const ListToolsRequestSchema: any; // Or a more specific type
   export function isInitializeRequest(body: any): boolean;
   // Add any other types/exports from '.../types.js'.
+}
+
+// Define McpToolHandlerContext globally so it can be used across files
+// without explicit imports if TS is configured to pick up .d.ts files.
+interface McpToolHandlerContext {
+  sendNotification(method: string, params?: Record<string, unknown>): Promise<void>;
+  sessionId: string;
 }
 

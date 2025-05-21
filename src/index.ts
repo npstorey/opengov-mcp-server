@@ -7,16 +7,17 @@ import type { Request, Response, NextFunction } from 'express';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import { UNIFIED_SOCRATA_TOOL, zParametersForValidation, handleSocrataTool } from './tools/socrata-tools.js';
+import {
+  UNIFIED_SOCRATA_TOOL,
+  socrataToolZodSchema,
+  type SocrataToolParams,
+} from './tools/socrata-tools.js';
 import crypto from 'crypto';
-import { z } from 'zod';
 
 dotenv.config();
 
-// Define context type based on global.d.ts for clarity
-type McpToolHandlerContext = { sendNotification(method: string, params?: Record<string, unknown>): Promise<void> };
-// Infer params type from the Zod schema
-type SocrataToolParams = z.infer<typeof zParametersForValidation>;
+// McpToolHandlerContext is now globally defined in src/global.d.ts
+// SocrataToolParams is imported from socrata-tools.js
 
 // Simplified: creates and configures an McpServer instance, does NOT connect it.
 async function createMcpServerInstance(): Promise<McpServer> {
@@ -28,44 +29,23 @@ async function createMcpServerInstance(): Promise<McpServer> {
     { capabilities: { tools: {} } } as any // Cast options if ServerOptions shim is not complete
   );
 
+  // Register the tool with the McpServer.
+  // The SDK will use `socrataToolZodSchema` to parse and validate incoming parameters.
+  // The handler will receive the parsed parameters as its first argument.
   serverInstance.tool(
     UNIFIED_SOCRATA_TOOL.name,
-    UNIFIED_SOCRATA_TOOL.parameters as unknown as z.ZodTypeAny,
-    async (sdkProvidedParams: any, sdkProvidedContext: any) => {
+    socrataToolZodSchema, // Provide the Zod schema itself to the SDK
+    async (parsedParams: SocrataToolParams, context: McpToolHandlerContext) => { // Uses global McpToolHandlerContext
       console.log(
-        `[MCP SDK Handler] First arg (sdkProvidedParams):`,
-        JSON.stringify(sdkProvidedParams, null, 2)
+        `[MCP SDK Handler] Parsed params received from SDK:`,
+        JSON.stringify(parsedParams, null, 2)
       );
-      console.log(
-        `[MCP SDK Handler] Second arg (sdkProvidedContext):`,
-        JSON.stringify(sdkProvidedContext, null, 2)
-      );
-
-      // Attempt to find the actual tool arguments from the client
-      // Common places: directly in sdkProvidedParams, or sdkProvidedParams.arguments, or sdkProvidedParams.params
-      let toolArguments: Record<string, unknown> | undefined = undefined;
-      if (sdkProvidedParams && typeof sdkProvidedParams === 'object') {
-        if ('arguments' in sdkProvidedParams && typeof sdkProvidedParams.arguments === 'object') {
-          toolArguments = sdkProvidedParams.arguments as Record<string, unknown>;
-          console.log('[MCP SDK Handler] Found client arguments in sdkProvidedParams.arguments');
-        } else if (sdkProvidedParams.type && sdkProvidedParams.query) {
-          // Fallback: Maybe the SDK *is* passing them at the top level of the first arg
-          // and our previous logging of the complex object hid it.
-          toolArguments = sdkProvidedParams as Record<string, unknown>; 
-          console.log('[MCP SDK Handler] Assuming sdkProvidedParams ARE the tool arguments (type/query found).');
-        } else {
-          console.log('[MCP SDK Handler] Client arguments NOT found in expected places within the first SDK param.');
-          // Default to passing the first sdk param, which is what handleSocrataTool currently expects/fails on
-          toolArguments = sdkProvidedParams as Record<string, unknown>; 
-        }
-      } else {
-        console.log('[MCP SDK Handler] First arg from SDK is not an object, passing as is.');
-        toolArguments = sdkProvidedParams as Record<string, unknown>; 
-      }
+      console.log(`[MCP SDK Handler] Context session ID: ${context.sessionId}`); // Should work now
 
       try {
         if (UNIFIED_SOCRATA_TOOL.handler) {
-          const result = await UNIFIED_SOCRATA_TOOL.handler(toolArguments || {});
+          // Pass the already parsed parameters to the tool's specific handler
+          const result = await UNIFIED_SOCRATA_TOOL.handler(parsedParams);
           return { content: [{ type: 'json', json: result }], isError: false };
         } else {
           throw new Error ('Tool handler not defined for UNIFIED_SOCRATA_TOOL');
