@@ -35,20 +35,24 @@ async function createMcpServerInstance(): Promise<McpServer> {
   serverInstance.tool(
     UNIFIED_SOCRATA_TOOL.name,
     socrataToolZodSchema, // Provide the Zod schema itself to the SDK
-    async (rawRequestPayload: any, context: McpToolHandlerContext) => {
+    async (rawRequestPayload: any, context: McpToolHandlerContext | undefined) => {
       console.log(
-        `[MCP SDK Handler - INSPECTION] RAW first argument (rawRequestPayload) received from SDK:`,
+        `[MCP SDK Handler - INSPECTION V2] RAW first argument (rawRequestPayload) received from SDK:`,
         JSON.stringify(rawRequestPayload, null, 2)
       );
-      console.log(
-        `[MCP SDK Handler - INSPECTION] RAW second argument (context) received from SDK:, sessionId=${context.sessionId}`,
-        // Avoid stringifying full context if it's complex or has circular refs
-        Object.keys(context) // Log keys to see its structure
-      );
+
+      if (context) {
+        console.log(
+          `[MCP SDK Handler - INSPECTION V2] RAW second argument (context) received from SDK. Session ID: ${context.sessionId}. Context Keys:`,
+          Object.keys(context)
+        );
+      } else {
+        console.log('[MCP SDK Handler - INSPECTION V2] RAW second argument (context) is undefined or null.');
+      }
 
       // TEMPORARY: Return a generic success to see if client error changes
       // and to focus on what the SDK provides in rawRequestPayload.
-      console.log('[MCP SDK Handler - INSPECTION] Bypassing tool logic, returning generic success.');
+      console.log('[MCP SDK Handler - INSPECTION V2] Bypassing tool logic, returning generic success.');
       return {
         content: [{ type: 'text', text: 'Inspection: Received call.' }],
         isError: false,
