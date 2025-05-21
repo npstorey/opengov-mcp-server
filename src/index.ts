@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+// import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'; // Will be replaced
+import { Server } from '@modelcontextprotocol/sdk/server/index.js'; // Low-level server
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
@@ -14,88 +15,110 @@ import {
 } from './tools/socrata-tools.js';
 import crypto from 'crypto';
 import { z } from 'zod';
+import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js'; // Import schema types
 
 dotenv.config();
 
-// McpToolHandlerContext is now globally defined in src/global.d.ts
-// SocrataToolParams is imported from socrata-tools.js
+// McpToolHandlerContext might not be directly used with the low-level Server in the same way.
+// We will manage context (like sessionId, sendNotification) differently if needed.
 
-// Simplified: creates and configures an McpServer instance, does NOT connect it.
-async function createMcpServerInstance(): Promise<McpServer> {
+async function createLowLevelServerInstance(): Promise<Server> { // Return type is now Server
   console.log(
-    '[MCP Server Factory] Creating McpServer instance, registering UNIFIED_SOCRATA_TOOL.'
+    '[Server Factory] Creating low-level Server instance.'
   );
-  const serverInstance = new McpServer(
-    { name: 'opengov-mcp-server', version: '0.1.1' },
-    { capabilities: { tools: {} } } as any
+  // For the low-level server, capabilities are set in the constructor options
+  const baseServer = new Server(
+    { name: 'opengov-mcp-server', version: '0.1.1' }, // ServerInfo
+    { capabilities: { tools: {} } } // ServerOptions
   );
 
-  serverInstance.tool(
-    UNIFIED_SOCRATA_TOOL.name,
-    socrataToolZodSchema, // Provide the Zod schema for the SDK to use
-    async (firstArgFromSdk: any, secondArgFromSdk: any) => {
-      console.log(
-        `[MCP SDK Handler - V6 - ARG TEST] Received first argument (firstArgFromSdk):`,
-        JSON.stringify(firstArgFromSdk, null, 2)
-      );
-      console.log(
-        `[MCP SDK Handler - V6 - ARG TEST] Keys of firstArgFromSdk:`, 
-        (firstArgFromSdk && typeof firstArgFromSdk === 'object') ? Object.keys(firstArgFromSdk) : typeof firstArgFromSdk
-      );
+  // --- Handle ListTools --- 
+  baseServer.setRequestHandler(ListToolsRequestSchema, async (request) => {
+    console.log('[Server - ListTools] Received ListTools request:', JSON.stringify(request, null, 2));
+    // The UNIFIED_SOCRATA_TOOL.parameters is already our JSON schema object
+    return {
+      tools: [
+        {
+          name: UNIFIED_SOCRATA_TOOL.name,
+          description: UNIFIED_SOCRATA_TOOL.description,
+          parameters: UNIFIED_SOCRATA_TOOL.parameters, // This is the JSON schema definition
+        },
+      ],
+    };
+  });
 
-      if (secondArgFromSdk) {
-        console.log(
-          `[MCP SDK Handler - V6 - ARG TEST] Received second argument (secondArgFromSdk) IS PRESENT. Keys:`,
-          Object.keys(secondArgFromSdk)
-        );
-      } else {
-        console.log('[MCP SDK Handler - V6 - ARG TEST] Second argument (secondArgFromSdk) is undefined or null.');
-      }
+  // --- Handle CallTool --- 
+  baseServer.setRequestHandler(CallToolRequestSchema, async (request) => {
+    console.log('[Server - CallTool] Received CallTool request:', JSON.stringify(request, null, 2));
 
-      // Now, critically, try to parse `firstArgFromSdk` with the tool's Zod schema
-      // This tests if the SDK passes the actual, parsed tool parameters as the first argument
-      // when the client sends them.
-      try {
-        console.log(
-          '[MCP SDK Handler - V6 - ARG TEST] Attempting socrataToolZodSchema.parse(firstArgFromSdk)'
-        );
-        const parsedParams = socrataToolZodSchema.parse(firstArgFromSdk);
-        console.log(
-          `[MCP SDK Handler - V6 - SUCCESS] Successfully Zod-parsed firstArgFromSdk as SocrataToolParams:`,
-          JSON.stringify(parsedParams, null, 2)
-        );
+    // The 'request' object here IS the full JSON-RPC request parsed according to CallToolRequestSchema.
+    // CallToolRequestSchema should define fields like: 
+    //   params: z.object({ name: z.string(), arguments: z.any() (or a more specific schema) })
+    //   id: z.union([z.string(), z.number()])
+    //   jsonrpc: z.literal('2.0')
+    //   method: z.literal('tools/call')
+    // We need to ensure our CallToolRequestSchema shim or the actual SDK type is correct.
+    // For now, let's assume request.params.name and request.params.arguments exist.
 
-        // If successful, proceed with the actual tool handler
-        if (UNIFIED_SOCRATA_TOOL.handler) {
-          const result = await UNIFIED_SOCRATA_TOOL.handler(parsedParams); 
-          return { content: [{ type: 'json', json: result }], isError: false };
-        } else {
-          throw new Error('Tool handler not defined for UNIFIED_SOCRATA_TOOL');
-        }
-      } catch (error: unknown) {
-        console.error(`[MCP SDK Handler - V6 - ERROR] Error during parsing or execution:`, error);
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        if (error instanceof z.ZodError) {
-          console.error('[MCP SDK Handler - V6 - ZodError Details] Issues:', JSON.stringify(error.issues, null, 2));
-        }
-        return {
-          content: [{ type: 'text', text: `Error in ${UNIFIED_SOCRATA_TOOL.name}: ${errorMessage}` }],
-          isError: true,
-        };
-      }
+    if (!request.params || typeof request.params !== 'object') {
+      console.error('[Server - CallTool] Error: request.params is missing or not an object');
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        error: { code: -32602, message: 'Invalid params: missing params object' },
+      };
     }
-  );
-  console.log('[DEBUG] Tool sent to client:', JSON.stringify(UNIFIED_SOCRATA_TOOL, null, 2));
-  console.log('[MCP Server Factory] UNIFIED_SOCRATA_TOOL registered on instance.');
-  
-  // Error handling can be set on the internal server instance if needed, or McpServer itself if it exposes it.
-  // const internalServer = serverInstance.server as unknown as { onError?: (cb: (error: Error) => void) => void; };
-  // if (typeof internalServer.onError === 'function') {
-  //   internalServer.onError((error: Error) => {
-  //     console.error('[MCP Internal Server Global Error]', error);
-  //   });
-  // }
-  return serverInstance;
+
+    const toolName = request.params.name;
+    const toolArgsFromRpc = request.params.arguments;
+
+    if (toolName === UNIFIED_SOCRATA_TOOL.name) {
+      try {
+        console.log(`[Server - CallTool] Calling tool: ${toolName} with args:`, JSON.stringify(toolArgsFromRpc, null, 2));
+        const parsedSocrataParams = socrataToolZodSchema.parse(toolArgsFromRpc);
+        console.log(`[Server - CallTool] Parsed Socrata params:`, JSON.stringify(parsedSocrataParams, null, 2));
+
+        if (!UNIFIED_SOCRATA_TOOL.handler) {
+          throw new Error(`Handler not defined for tool: ${toolName}`);
+        }
+
+        const toolResult = await UNIFIED_SOCRATA_TOOL.handler(parsedSocrataParams);
+        console.log(`[Server - CallTool] Tool ${toolName} executed. Result:`, JSON.stringify(toolResult, null, 2));
+        
+        // Construct the JSON-RPC success response
+        return {
+          // No jsonrpc or id field here, the Server class wraps this in the full JSON-RPC response.
+          // This return is just the 'result' field of the JSON-RPC response.
+          content: [{ type: 'json', json: toolResult }], 
+          isError: false // MCP-specific part of the result content for tools
+        };
+
+      } catch (error: unknown) {
+        console.error(`[Server - CallTool] Error executing tool ${toolName}:`, error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        let errorCode = -32000; // Generic server error
+        if (error instanceof z.ZodError) {
+          errorCode = -32602; // Invalid params
+          console.error('[Server - CallTool] ZodError issues:', JSON.stringify(error.issues, null, 2));
+        }
+        // Construct the JSON-RPC error response (this is the 'error' object part)
+        // The Server class will wrap this into the full JSON-RPC error structure.
+        // However, setRequestHandler expects to return the *result* part or throw to indicate an error.
+        // Let's throw an error that the Server class can then format into a proper JSON-RPC error.
+        // Re-throwing the original error might be best if it contains useful info.
+        // Or, craft a specific error structure if Server expects that.
+        // For now, re-throw. The SDK examples for low-level server show throwing errors.
+        throw error; // The Server class should catch this and formulate a JSON-RPC error.
+      }
+    } else {
+      console.warn(`[Server - CallTool] Unknown tool called: ${toolName}`);
+      // Throw an error for unknown tool, Server should format it.
+      throw new Error(`Method not found: ${toolName}`); 
+    }
+  });
+
+  console.log('[Server Factory] Low-level Server instance created and request handlers (ListTools, CallTool) registered.');
+  return baseServer;
 }
 
 function generateSessionId(): string {
@@ -104,7 +127,8 @@ function generateSessionId(): string {
 
 async function startApp() {
   let mainTransportInstance: StreamableHTTPServerTransport | undefined = undefined;
-  let singleMcpServer: McpServer | undefined = undefined;
+  // let singleMcpServer: McpServer | undefined = undefined; // Will be replaced
+  let lowLevelServer: Server | undefined = undefined; // New server instance variable
 
   try {
     const app = express();
@@ -178,13 +202,15 @@ async function startApp() {
     };
 
     // --- Create Single McpServer Instance (remains the same) --- 
-    console.log('[MCP Setup] Creating single McpServer instance...');
-    singleMcpServer = await createMcpServerInstance();
+    console.log('[MCP Setup] Creating single Server instance (low-level)...');
+    // singleMcpServer = await createMcpServerInstance(); // Will be replaced
+    lowLevelServer = await createLowLevelServerInstance();
 
     // --- Connect McpServer to Transport (ONCE - remains the same) --- 
-    console.log('[MCP Setup] Connecting single McpServer to main transport...');
-    await singleMcpServer.connect(mainTransportInstance);
-    console.log('[MCP Setup] Single McpServer connected to main transport.');
+    console.log('[MCP Setup] Connecting single Server (low-level) to main transport...');
+    // await singleMcpServer.connect(mainTransportInstance); // Will be replaced
+    await lowLevelServer.connect(mainTransportInstance!);
+    console.log('[MCP Setup] Single Server (low-level) connected to main transport.');
     
     mainTransportInstance.onerror = (error: Error) => {
         console.error('[MCP Transport - onerror] Transport-level error:', error);
@@ -228,9 +254,17 @@ async function startApp() {
 
     const gracefulShutdown = async (signal: string) => {
       console.log(`${signal} signal received: closing resources.`);
-      if (singleMcpServer) {
-        console.log('Closing McpServer...');
-        await singleMcpServer.close().catch(e => console.error('Error closing McpServer:', e));
+      // if (singleMcpServer) { // Will be replaced
+      //   console.log('Closing McpServer...');
+      //   await singleMcpServer.close().catch(e => console.error('Error closing McpServer:', e));
+      // }
+      if (lowLevelServer) {
+        console.log('Closing low-level Server...');
+        // The low-level Server might have a different close method or rely on transport.close()
+        // For now, let's assume it has a close method similar to McpServer.
+        // SDK docs for `Server` don't explicitly list .close(), it might be on the transport or implicit.
+        // McpServer had .close(). The base `Server` might not. It connects to transport, transport closes.
+        // We'll rely on transport.close() for now, and McpServer was likely wrapping that.
       }
       if (mainTransportInstance) {
         console.log('Closing main transport...');
@@ -247,9 +281,10 @@ async function startApp() {
 
   } catch (err) {
     console.error('Fatal error during application startup:', err);
-    if (singleMcpServer) {
-      await singleMcpServer.close().catch(e => console.error('Error closing McpServer during fatal startup error:', e));
-    }
+    // if (singleMcpServer) { // Will be replaced
+    //   await singleMcpServer.close().catch(e => console.error('Error closing McpServer during fatal startup error:', e));
+    // }
+    // No specific close for lowLevelServer here yet, transport handles it.
     if (mainTransportInstance) {
       await mainTransportInstance.close().catch(e => console.error('Error closing main transport during fatal startup error:', e));
     }

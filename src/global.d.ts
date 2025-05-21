@@ -54,6 +54,14 @@ declare module '@modelcontextprotocol/sdk/server/index.js' {
     constructor(serverInfo: any, options?: ServerOptions);
     connect(transport: Transport): Promise<void>;
     send(message: JSONRPCMessage, options?: any): Promise<void>;
+
+    // Add setRequestHandler based on SDK usage patterns
+    // It takes a Zod schema for the request and a handler that receives the parsed request.
+    // The handler returns the result part of the JSON-RPC response.
+    setRequestHandler<Schema extends import('zod').ZodTypeAny>(
+      schema: Schema,
+      handler: (request: import('zod').z.infer<Schema>) => Promise<any> // Return type is the 'result' field of JSON-RPC response
+    ): void;
   }
 }
 
