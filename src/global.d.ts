@@ -112,7 +112,8 @@ declare module '@modelcontextprotocol/sdk/types.js' {
   export interface Tool {
     name: string;
     description: string;
-    inputSchema: ZodTypeAny;
+    inputSchema?: ZodTypeAny;
+    parameters?: ZodTypeAny;
   }
   export const CallToolRequestSchema: any; // Or a more specific type based on SDK
   export const ListToolsRequestSchema: any; // Or a more specific type

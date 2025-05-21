@@ -251,11 +251,11 @@ async function handleSiteMetrics(params: {
 export const UNIFIED_SOCRATA_TOOL: Tool = {
   name: 'get_data',
   description: 'A unified tool to interact with Socrata open data portals. It can search the data catalog, get metadata about datasets and columns, retrieve categories and tags, access data using SoQL queries, and fetch site metrics.',
-  inputSchema: z.object({
+  parameters: z.object({
     type: z.enum(['catalog', 'metadata', 'query', 'metrics'])
-      .describe('The type of Socrata operation to perform (e.g., "catalog", "query"). This is required.'),
+      .describe('Operation to perform'),
     query: z.string().min(1)
-      .describe('The search query string or relevant identifier for the operation.')
+      .describe('Search term / dataset identifier')
   }),
 };
 
