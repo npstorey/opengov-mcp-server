@@ -73,8 +73,13 @@ async function startApp() {
   try {
     const app = express();
     
-    // Enable open CORS for testing
-    app.use(cors({ origin: true, credentials: true }));
+    // Enable CORS with exposed session header
+    app.use(cors({
+      origin: true,          // or your explicit allow-list
+      credentials: true,
+      exposedHeaders: ['mcp-session-id']   // allow browsers to read it
+    }));
+    
     app.options('/mcp', cors({ origin: true, credentials: true }));
 
     const port = Number(process.env.PORT) || 8000;
