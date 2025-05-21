@@ -37,9 +37,34 @@ async function createMcpServerInstance(): Promise<McpServer> {
     socrataToolZodSchema, // Provide the Zod schema itself to the SDK
     async (rawRequestPayload: any, context: McpToolHandlerContext | undefined) => {
       console.log(
-        `[MCP SDK Handler - INSPECTION V2] RAW first argument (rawRequestPayload) received from SDK:`,
-        JSON.stringify(rawRequestPayload, null, 2)
+        `[MCP SDK Handler - INSPECTION V3] RAW first argument (rawRequestPayload) received from SDK. Type: ${typeof rawRequestPayload}`
       );
+      if (rawRequestPayload && typeof rawRequestPayload === 'object') {
+        console.log('[MCP SDK Handler - INSPECTION V3] Keys of rawRequestPayload:', Object.keys(rawRequestPayload));
+        console.log('[MCP SDK Handler - INSPECTION V3] Stringified rawRequestPayload:', JSON.stringify(rawRequestPayload, null, 2));
+
+        // Log specific potentially nested properties
+        if ('signal' in rawRequestPayload) {
+          console.log('[MCP SDK Handler - INSPECTION V3] rawRequestPayload.signal:', JSON.stringify(rawRequestPayload.signal, null, 2));
+        }
+        if ('_meta' in rawRequestPayload) {
+          console.log('[MCP SDK Handler - INSPECTION V3] rawRequestPayload._meta:', JSON.stringify(rawRequestPayload._meta, null, 2));
+        }
+        // Check for a generic 'params' or 'arguments' field, as these are common in RPC calls
+        if ('params' in rawRequestPayload) {
+          console.log('[MCP SDK Handler - INSPECTION V3] rawRequestPayload.params:', JSON.stringify(rawRequestPayload.params, null, 2));
+        }
+        if ('arguments' in rawRequestPayload) {
+          console.log('[MCP SDK Handler - INSPECTION V3] rawRequestPayload.arguments:', JSON.stringify(rawRequestPayload.arguments, null, 2));
+        }
+        // Check for a generic 'request' field
+        if ('request' in rawRequestPayload) {
+          console.log('[MCP SDK Handler - INSPECTION V3] rawRequestPayload.request:', JSON.stringify(rawRequestPayload.request, null, 2));
+        }
+
+      } else {
+        console.log('[MCP SDK Handler - INSPECTION V3] rawRequestPayload is not an object or is null.');
+      }
 
       if (context) {
         console.log(
