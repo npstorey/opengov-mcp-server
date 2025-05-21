@@ -15,7 +15,7 @@ dotenv.config();
 
 // Define context type based on global.d.ts for clarity
 type McpToolHandlerContext = { sendNotification(method: string, params?: Record<string, unknown>): Promise<void> };
-// Infer params type from the Zod schema
+// Infer params type from the Zod schema (which is now directly on UNIFIED_SOCRATA_TOOL.parameters)
 type SocrataToolParams = z.infer<typeof UNIFIED_SOCRATA_TOOL.parameters>;
 
 // Simplified: creates and configures an McpServer instance, does NOT connect it.

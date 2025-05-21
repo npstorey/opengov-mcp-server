@@ -248,24 +248,29 @@ async function handleSiteMetrics(params: {
 }
 
 // Consolidated Socrata tool
+// Define with Zod (for type-safety and for the SDK)
+export const zParameters = z.object({
+  type: z.enum(['catalog', 'metadata', 'query', 'metrics'])
+    .describe('Operation to perform'),
+  query: z.string().min(1)
+    .describe('Search phrase, dataset id, or SoQL string')
+}); // Initially without .strict()
+
+// UNIFIED_SOCRATA_TOOL will use the Zod schema directly
 export const UNIFIED_SOCRATA_TOOL: Tool = {
   name: 'get_data',
   description:
     'A unified tool to interact with Socrata open-data portals.',
-  parameters: z.object({
-    type: z.enum(['catalog', 'metadata', 'query', 'metrics'])
-      .describe('Operation to perform'),
-    query: z.string().min(1)
-      .describe('Search phrase, dataset id, or SoQL string')
-  }).strict(),
+  parameters: zParameters, // Use the Zod object directly
   handler: handleSocrataTool
 };
 
 // Main handler function that dispatches to specific handlers based on type
-export async function handleSocrataTool(params: Record<string, unknown>): Promise<unknown> {
+export async function handleSocrataTool(rawParams: Record<string, unknown>): Promise<unknown> {
+  const params = zParameters.parse(rawParams); // Parse with the Zod schema
   const type = params.type as string;
   const query = params.query as string;
-  const typedParams = params as any;
+  const typedParams = params as any; // Keep this for now, but ideally, refactor to avoid `as any`
 
   // Ensure a default domain is set if not provided, applicable to most handlers
   if (!typedParams.domain) {
