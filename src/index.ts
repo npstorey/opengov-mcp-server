@@ -32,48 +32,51 @@ async function createMcpServerInstance(): Promise<McpServer> {
 
   serverInstance.tool(
     UNIFIED_SOCRATA_TOOL.name,
-    socrataToolZodSchema, // This is our P extends ZodTypeAny
-    async (parsedToolParams: SocrataToolParams, sdkContext?: McpToolHandlerContext) => {
-      // According to SDK examples, parsedToolParams should be z.infer<typeof socrataToolZodSchema>
+    socrataToolZodSchema, // Provide the Zod schema for the SDK to use
+    async (firstArgFromSdk: any, secondArgFromSdk: any) => {
       console.log(
-        `[MCP SDK Handler - V5 - STRICT PARAMS] Received first argument (parsedToolParams):`,
-        JSON.stringify(parsedToolParams, null, 2)
+        `[MCP SDK Handler - V6 - ARG TEST] Received first argument (firstArgFromSdk):`,
+        JSON.stringify(firstArgFromSdk, null, 2)
+      );
+      console.log(
+        `[MCP SDK Handler - V6 - ARG TEST] Keys of firstArgFromSdk:`, 
+        (firstArgFromSdk && typeof firstArgFromSdk === 'object') ? Object.keys(firstArgFromSdk) : typeof firstArgFromSdk
       );
 
-      if (sdkContext) {
+      if (secondArgFromSdk) {
         console.log(
-          `[MCP SDK Handler - V5 - STRICT PARAMS] Received second argument (sdkContext). Session ID: ${sdkContext.sessionId}. Context Keys:`,
-          Object.keys(sdkContext)
+          `[MCP SDK Handler - V6 - ARG TEST] Received second argument (secondArgFromSdk) IS PRESENT. Keys:`,
+          Object.keys(secondArgFromSdk)
         );
       } else {
-        console.log('[MCP SDK Handler - V5 - STRICT PARAMS] Second argument (sdkContext) is undefined or null.');
+        console.log('[MCP SDK Handler - V6 - ARG TEST] Second argument (secondArgFromSdk) is undefined or null.');
       }
 
+      // Now, critically, try to parse `firstArgFromSdk` with the tool's Zod schema
+      // This tests if the SDK passes the actual, parsed tool parameters as the first argument
+      // when the client sends them.
       try {
-        // We now directly use parsedToolParams, assuming the SDK has done its job.
-        // No more manual searching in callEnvelope.
         console.log(
-          `[MCP SDK Handler - V5 - STRICT PARAMS] Attempting to use parsedToolParams for tool execution.`
+          '[MCP SDK Handler - V6 - ARG TEST] Attempting socrataToolZodSchema.parse(firstArgFromSdk)'
+        );
+        const parsedParams = socrataToolZodSchema.parse(firstArgFromSdk);
+        console.log(
+          `[MCP SDK Handler - V6 - SUCCESS] Successfully Zod-parsed firstArgFromSdk as SocrataToolParams:`,
+          JSON.stringify(parsedParams, null, 2)
         );
 
+        // If successful, proceed with the actual tool handler
         if (UNIFIED_SOCRATA_TOOL.handler) {
-          const result = await UNIFIED_SOCRATA_TOOL.handler(parsedToolParams);
-          console.log(
-            `[MCP SDK Handler - V5 - SUCCESS] Tool executed successfully. Result:`,
-            JSON.stringify(result, null, 2)
-          );
+          const result = await UNIFIED_SOCRATA_TOOL.handler(parsedParams); 
           return { content: [{ type: 'json', json: result }], isError: false };
         } else {
-          throw new Error ('Tool handler not defined for UNIFIED_SOCRATA_TOOL');
+          throw new Error('Tool handler not defined for UNIFIED_SOCRATA_TOOL');
         }
       } catch (error: unknown) {
-        console.error(`[MCP SDK Handler - V5 - ERROR] Failed to execute tool ${UNIFIED_SOCRATA_TOOL.name}:`, error);
+        console.error(`[MCP SDK Handler - V6 - ERROR] Error during parsing or execution:`, error);
         const errorMessage = error instanceof Error ? error.message : String(error);
-        // If it's a ZodError, it means the SDK didn't pass the correctly parsed params as the first argument.
         if (error instanceof z.ZodError) {
-          console.error('[MCP SDK Handler - V5 - ZodError Details] Issues:', JSON.stringify(error.issues, null, 2));
-          // Log what was actually received as parsedToolParams if it caused a ZodError (which shouldn't happen if SDK worked as expected)
-          console.error('[MCP SDK Handler - V5 - ZodError Value] Received as parsedToolParams:', JSON.stringify(parsedToolParams, null, 2));
+          console.error('[MCP SDK Handler - V6 - ZodError Details] Issues:', JSON.stringify(error.issues, null, 2));
         }
         return {
           content: [{ type: 'text', text: `Error in ${UNIFIED_SOCRATA_TOOL.name}: ${errorMessage}` }],
