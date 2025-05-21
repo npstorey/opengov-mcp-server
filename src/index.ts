@@ -34,7 +34,8 @@ async function createLowLevelServerInstance(): Promise<Server> { // Return type 
         prompts: {}, // Explicitly declare prompts capability (even if empty)
         roots: { listChanged: true }, // Standard capability
         sampling: {} // Standard capability
-      } 
+      },
+      authMethods: [] // Explicitly state no authentication methods are offered
     } // ServerOptions
   );
 
