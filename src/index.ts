@@ -26,10 +26,16 @@ async function createLowLevelServerInstance(): Promise<Server> { // Return type 
   console.log(
     '[Server Factory] Creating low-level Server instance.'
   );
-  // For the low-level server, capabilities are set in the constructor options
   const baseServer = new Server(
     { name: 'opengov-mcp-server', version: '0.1.1' }, // ServerInfo
-    { capabilities: { tools: {} } } // ServerOptions
+    { 
+      capabilities: { 
+        tools: {}, 
+        prompts: {}, // Explicitly declare prompts capability (even if empty)
+        roots: { listChanged: true }, // Standard capability
+        sampling: {} // Standard capability
+      } 
+    } // ServerOptions
   );
 
   // --- Handle ListTools --- 
@@ -141,21 +147,20 @@ async function startApp() {
       credentials: true, 
       exposedHeaders: ['mcp-session-id'] 
     }));
-    // app.options(mcpPath, cors({ origin: true, credentials: true })); // Original OPTIONS handler
-
-    const mcpPath = '/mcp'; // Declare mcpPath earlier
+    const mcpPath = '/mcp'; // Declare mcpPath before it is used by app.options
+    app.options(mcpPath, cors({ origin: true, credentials: true })); // Restore original OPTIONS handler
 
     // TEMPORARY DIAGNOSTIC: More permissive OPTIONS handler for /mcp
-    app.options(mcpPath, (req: Request, res: Response) => {
-      const origin = req.headers.origin || '*';
-      console.log(`[Express /mcp OPTIONS - DIAGNOSTIC] route hit from ${origin}. Responding with permissive headers.`);
-      res.header('Access-Control-Allow-Origin', origin); 
-      res.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-      res.header('Access-Control-Allow-Headers', 'Content-Type, mcp-session-id, Authorization, X-MCP-Client-Name, X-MCP-Client-Version'); // Added more common MCP headers
-      res.header('Access-Control-Allow-Credentials', 'true');
-      res.header('Access-Control-Max-Age', '86400'); // Optional: Cache preflight for 1 day
-      res.sendStatus(204); // No Content - Standard for successful preflight
-    });
+    // app.options(mcpPath, (req: Request, res: Response) => { // Keep this commented out
+    //   const origin = req.headers.origin || '*';
+    //   console.log(`[Express /mcp OPTIONS - DIAGNOSTIC] route hit from ${origin}. Responding with permissive headers.`);
+    //   res.header('Access-Control-Allow-Origin', origin); 
+    //   res.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+    //   res.header('Access-Control-Allow-Headers', 'Content-Type, mcp-session-id, Authorization, X-MCP-Client-Name, X-MCP-Client-Version');
+    //   res.header('Access-Control-Allow-Credentials', 'true');
+    //   res.header('Access-Control-Max-Age', '86400');
+    //   res.sendStatus(204); 
+    // });
 
     const port = Number(process.env.PORT) || 8000;
     // const mcpPath = '/mcp'; // Original declaration position, now moved up
@@ -236,6 +241,9 @@ async function startApp() {
 
     /* ── 2.  NO express.json() before /mcp!  ───────────────── */
     app.all(mcpPath, (req: Request, res: Response) => {
+      // Earliest log for any /mcp request
+      console.log(`[Express /mcp ENTRY] Method: ${req.method}, URL: ${req.originalUrl}, Origin: ${req.headers.origin}`);
+      
       // The raw body logger middleware above should have logged POST bodies.
       console.log(`[Express /mcp ${req.method}] route hit. Headers:`, JSON.stringify(req.headers, null, 2));
       if (req.method === 'POST' && req.body) {
