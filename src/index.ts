@@ -110,6 +110,15 @@ async function startApp() {
       },
     });
 
+    // Assign onmessage handler directly to the instance for inspection
+    mainTransportInstance.onmessage = (message: any, extra?: { authInfo?: any; sessionId?: string }) => {
+      console.log('[MCP Transport - onmessage V2] Received message:', JSON.stringify(message, null, 2));
+      if (extra) {
+        console.log('[MCP Transport - onmessage V2] Extra info:', JSON.stringify(extra, null, 2));
+      }
+      // This is for inspection only. The McpServer has its own listeners.
+    };
+
     // --- Create Single McpServer Instance (remains the same) --- 
     console.log('[MCP Setup] Creating single McpServer instance...');
     singleMcpServer = await createMcpServerInstance();
