@@ -253,9 +253,11 @@ export const UNIFIED_SOCRATA_TOOL: Tool = {
   description:
     'A unified tool to interact with Socrata open-data portals.',
   parameters: z.object({
-    type: z.enum(['catalog', 'metadata', 'query', 'metrics']),
+    type: z.enum(['catalog', 'metadata', 'query', 'metrics'])
+      .describe('Operation to perform'),
     query: z.string().min(1)
-  }),
+      .describe('Search phrase, dataset id, or SoQL string')
+  }).strict(),
   handler: handleSocrataTool
 };
 
