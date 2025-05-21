@@ -1,4 +1,6 @@
 import { z } from 'zod';
+// import { zodToJsonSchema, type JsonSchema7Type } from 'zod-to-json-schema'; // No longer using zodToJsonSchema
+import { type JsonSchema7Type } from 'zod-to-json-schema'; // Keep for typing if manually constructing
 import { Tool } from '@modelcontextprotocol/sdk/types.js'; // Suffix needed
 import {
   fetchFromSocrataApi,
@@ -247,30 +249,46 @@ async function handleSiteMetrics(params: {
   return response;
 }
 
-// Consolidated Socrata tool
-// Define with Zod (for type-safety and for the SDK)
-export const zParameters = z.object({
-  type: z.enum(['catalog', 'metadata', 'query', 'metrics'])
-    .describe('Operation to perform'),
+// 1️⃣ Zod definition for runtime validation
+export const zParametersForValidation = z.object({
+  type: z.enum(['catalog','metadata','query','metrics'])
+         .describe('Operation to perform'),
   query: z.string().min(1)
-    .describe('Search phrase, dataset id, or SoQL string')
-}); // Initially without .strict()
+         .describe('Search phrase, dataset id, or SoQL string')
+});
 
-// UNIFIED_SOCRATA_TOOL will use the Zod schema directly
+// 2️⃣ Manually defined JSON Schema (conforming to JsonSchema7Type)
+const jsonParameters: JsonSchema7Type = {
+  type: 'object',
+  properties: {
+    type: {
+      type: 'string',
+      enum: ['catalog', 'metadata', 'query', 'metrics'],
+      description: 'Operation to perform'
+    },
+    query: {
+      type: 'string',
+      minLength: 1,
+      description: 'Search phrase, dataset id, or SoQL string'
+    }
+  },
+  required: ['type', 'query']
+};
+
+// 3️⃣ Tool uses the manually crafted JSON schema
 export const UNIFIED_SOCRATA_TOOL: Tool = {
   name: 'get_data',
-  description:
-    'A unified tool to interact with Socrata open-data portals.',
-  parameters: zParameters, // Use the Zod object directly
+  description: 'A unified tool to interact with Socrata open-data portals.',
+  parameters: jsonParameters,
   handler: handleSocrataTool
 };
 
 // Main handler function that dispatches to specific handlers based on type
 export async function handleSocrataTool(rawParams: Record<string, unknown>): Promise<unknown> {
-  const params = zParameters.parse(rawParams); // Parse with the Zod schema
+  const params = zParametersForValidation.parse(rawParams); // Use the Zod schema for parsing
   const type = params.type as string;
   const query = params.query as string;
-  const typedParams = params as any; // Keep this for now, but ideally, refactor to avoid `as any`
+  const typedParams = params as any; 
 
   // Ensure a default domain is set if not provided, applicable to most handlers
   if (!typedParams.domain) {

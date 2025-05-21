@@ -107,11 +107,12 @@ declare module '@modelcontextprotocol/sdk/server/streamableHttp.js' {
 
 declare module '@modelcontextprotocol/sdk/types.js' {
   import { ZodTypeAny } from 'zod';
+  import { type JsonSchema7Type } from 'zod-to-json-schema'; // Import the JSON schema type
 
   export interface Tool {
     name: string;
     description?: string;
-    parameters: ZodTypeAny;
+    parameters: JsonSchema7Type; // Changed to JsonSchema7Type
     handler?: (params: Record<string, unknown>) => Promise<unknown>;
   }
   export const CallToolRequestSchema: any; // Or a more specific type based on SDK
