@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 const retrieveToolSchema = {
   name: 'retrieve',
   description: 'Retrieves relevant information based on a query',
-  inputSchema: {
+  parameters: {
     type: 'object',
     properties: {
       query: {
@@ -34,17 +34,17 @@ describe('tool schema', () => {
   });
   
   it('should have required query parameter', () => {
-    expect(retrieveToolSchema.inputSchema.required).toContain('query');
+    expect(retrieveToolSchema.parameters.required).toContain('query');
   });
   
   it('should have optional limit parameter with default value', () => {
-    const limitProperty = retrieveToolSchema.inputSchema.properties.limit;
+    const limitProperty = retrieveToolSchema.parameters.properties.limit;
     expect(limitProperty).toBeDefined();
     expect(limitProperty.type).toBe('number');
     expect(limitProperty.default).toBe(5);
   });
   
   it('should not allow additional properties', () => {
-    expect(retrieveToolSchema.inputSchema.additionalProperties).toBe(false);
+    expect(retrieveToolSchema.parameters.additionalProperties).toBe(false);
   });
 });

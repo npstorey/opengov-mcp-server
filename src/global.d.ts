@@ -112,6 +112,7 @@ declare module '@modelcontextprotocol/sdk/types.js' {
     name: string;
     description?: string;
     parameters: ZodTypeAny;
+    handler?: (params: Record<string, unknown>) => Promise<unknown>;
   }
   export const CallToolRequestSchema: any; // Or a more specific type based on SDK
   export const ListToolsRequestSchema: any; // Or a more specific type

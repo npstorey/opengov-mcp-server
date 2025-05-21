@@ -250,13 +250,12 @@ async function handleSiteMetrics(params: {
 // Consolidated Socrata tool
 export const UNIFIED_SOCRATA_TOOL: Tool = {
   name: 'get_data',
-  description: 'A unified tool to interact with Socrata open data portals. It can search the data catalog, get metadata about datasets and columns, retrieve categories and tags, access data using SoQL queries, and fetch site metrics.',
+  description: 'A unified tool to interact with Socrata open-data portals.',
   parameters: z.object({
-    type: z.enum(['catalog', 'metadata', 'query', 'metrics'])
-      .describe('Operation to perform'),
+    type: z.enum(['catalog', 'metadata', 'query', 'metrics']),
     query: z.string().min(1)
-      .describe('Search term / dataset identifier')
-  })
+  }),
+  handler: handleSocrataTool
 };
 
 // Main handler function that dispatches to specific handlers based on type
