@@ -83,7 +83,9 @@ async function startApp() {
         'http://localhost:8000', 
         'http://localhost:10000',
         'https://127.0.0.1:6274', // Added Inspector origin
-        'http://127.0.0.1:6274'   // Added Inspector origin
+        'http://127.0.0.1:6274',   // Added Inspector origin
+        'https://inspect.mcp.garden',
+        'https://*.mcp.garden'      
       ],
       credentials: true 
     }));
