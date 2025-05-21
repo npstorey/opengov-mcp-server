@@ -285,6 +285,7 @@ export const UNIFIED_SOCRATA_TOOL: Tool = {
 
 // Main handler function that dispatches to specific handlers based on type
 export async function handleSocrataTool(rawParams: Record<string, unknown>): Promise<unknown> {
+  console.log('[DEBUG] Raw params received by handler:', JSON.stringify(rawParams, null, 2)); // Added for debugging
   const params = zParametersForValidation.parse(rawParams); // Use the Zod schema for parsing
   const type = params.type as string;
   const query = params.query as string;
