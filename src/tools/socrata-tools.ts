@@ -252,61 +252,52 @@ export const UNIFIED_SOCRATA_TOOL: Tool = {
   name: 'get_data',
   description: 'A unified tool to interact with Socrata open data portals. It can search the data catalog, get metadata about datasets and columns, retrieve categories and tags, access data using SoQL queries, and fetch site metrics.',
   inputSchema: z.object({
-    type: z.enum([
-      'catalog',
-      'categories',
-      'tags',
-      'dataset-metadata',
-      'column-info',
-      'data-access',
-      'site-metrics'
-    ]).describe('The type of Socrata operation to perform (e.g., "catalog", "data-access"). This is required.')
-  }).strict()
+    type: z.enum(['catalog', 'metadata', 'query', 'metrics'])
+      .describe('The type of Socrata operation to perform (e.g., "catalog", "query"). This is required.'),
+    query: z.string().min(1)
+      .describe('The search query string or relevant identifier for the operation.')
+  }),
 };
 
 // Main handler function that dispatches to specific handlers based on type
 export async function handleSocrataTool(params: Record<string, unknown>): Promise<unknown> {
   const type = params.type as string;
-  const typedParams = params as any; // Cast to any to avoid excessive type checking here, validation is done by Zod
+  const query = params.query as string;
+  const typedParams = params as any;
 
   // Ensure a default domain is set if not provided, applicable to most handlers
   if (!typedParams.domain) {
     typedParams.domain = getDefaultDomain();
   }
-  if (!typedParams.domain && ['catalog', 'categories', 'tags', 'dataset-metadata', 'column-info', 'data-access', 'site-metrics'].includes(type)) {
-    // For types that absolutely require a domain (either user-provided or default from .env)
-    // and getDefaultDomain() returned undefined (meaning .env variable is not set)
+  if (!typedParams.domain && ['catalog', 'metadata', 'query', 'metrics'].includes(type)) {
     throw new Error('Domain parameter is required for this operation type and no default DATA_PORTAL_URL is configured.');
   }
 
-  // Set defaults for limit and offset if not provided, applicable to relevant handlers
-  if (typedParams.limit === undefined && (type === 'catalog' || type === 'data-access')) {
+  // Default for limit/offset might apply to 'catalog' and 'query' (data-access)
+  if (typedParams.limit === undefined && (type === 'catalog' || type === 'query')) {
     typedParams.limit = 10;
   }
-  if (typedParams.offset === undefined && (type === 'catalog' || type === 'data-access')) {
+  if (typedParams.offset === undefined && (type === 'catalog' || type === 'query')) {
     typedParams.offset = 0;
   }
 
   switch (type) {
     case 'catalog':
-      return handleCatalog(typedParams as {
-        query?: string;
-        domain?: string;
-        limit?: number;
-        offset?: number;
-      });
+      return handleCatalog({ ...typedParams, query });
+    case 'metadata':
+      console.warn("[handleSocrataTool] 'metadata' case needs review: 'query' param received, but 'datasetId' was expected for dataset metadata.");
+      if (!query) throw new Error('Query (expected as datasetId) is required for type=metadata');
+      return handleDatasetMetadata({ ...typedParams, datasetId: query });
+    case 'query':
+      console.warn("[handleSocrataTool] 'query' case needs review: mapping generic 'query' to data access parameters.");
+      if (!query) throw new Error('Query (expected as datasetId) is required for type=query (data-access)');
+      return handleDataAccess({ ...typedParams, datasetId: query, q: typedParams.q || query });
+    case 'metrics':
+      return handleSiteMetrics(typedParams as { domain?: string });
     case 'categories':
       return handleCategories(typedParams as { domain?: string });
     case 'tags':
       return handleTags(typedParams as { domain?: string });
-    case 'dataset-metadata':
-      if (!typedParams.datasetId) {
-        throw new Error('datasetId is required for type=dataset-metadata');
-      }
-      return handleDatasetMetadata(typedParams as {
-        datasetId: string;
-        domain?: string;
-      });
     case 'column-info':
       if (!typedParams.datasetId) {
         throw new Error('datasetId is required for type=column-info');
@@ -315,28 +306,8 @@ export async function handleSocrataTool(params: Record<string, unknown>): Promis
         datasetId: string;
         domain?: string;
       });
-    case 'data-access':
-      if (!typedParams.datasetId) {
-        throw new Error('datasetId is required for type=data-access');
-      }
-      return handleDataAccess(typedParams as {
-        datasetId: string;
-        domain?: string;
-        query?: string; // This refers to the simple 'q' text search if soqlQuery is not used
-        limit?: number;
-        offset?: number;
-        select?: string;
-        where?: string;
-        order?: string;
-        group?: string;
-        having?: string;
-        q?: string; // This is the specific Socrata param for full-text search if soqlQuery not used.
-        soqlQuery?: string; // The comprehensive SoQL query.
-      });
-    case 'site-metrics':
-      return handleSiteMetrics(typedParams as { domain?: string });
     default:
-      throw new Error(`Unknown Socrata operation type: ${type}`);
+      throw new Error(`Unknown Socrata operation type: ${type}. Supported types are catalog, metadata, query, metrics.`);
   }
 }
 
