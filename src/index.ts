@@ -73,10 +73,7 @@ async function startApp() {
   try {
     const app = express();
     
-    // 1) Global JSON body parser (must run before any /mcp handlers)
-    app.use(express.json());
-
-    // Re-adding global CORS policy for Claude web client and other origins
+    // Global CORS policy (remains)
     app.use(cors({ 
       origin: ['https://claude.ai', 'https://*.claude.ai', 'https://studio.claude.ai', 'http://localhost:3000', 'http://localhost:8000', 'http://localhost:10000'],
       credentials: true 
@@ -85,40 +82,16 @@ async function startApp() {
     const port = Number(process.env.PORT) || 8000;
     const mcpPath = '/mcp';
 
-    // 1) OPTIONS /mcp (CORS preflight)
-    // Assuming cors() here means default CORS settings for the OPTIONS request
+    // OPTIONS /mcp (CORS preflight - remains)
     app.options(mcpPath, cors());
 
-    // 2) Health check
+    // Health check (remains)
     app.get('/healthz', (_req: Request, res: Response) => {
-      console.log('[MCP Health] /healthz endpoint hit - v2'); // Added v2 for clarity during transition
+      console.log('[MCP Health] /healthz endpoint hit - v2');
       res.sendStatus(200);
     });
 
-    // 3) POST /mcp: allow initialize, enforce session on everything else
-    app.post(mcpPath, (req: Request, res: Response, next: NextFunction) => {
-      console.log('[MCP POST] method=', req.body?.method);
-      if (req.body?.method === 'initialize') {
-        return next();
-      }
-      if (!req.headers['mcp-session-id']) {
-        return res.status(400).json({ jsonrpc: '2.0', error: { code: -32000, message: 'Mcp-Session-Id required' } });
-      }
-      next();
-    });
-
-    // 4) GET /mcp shim for non-SSE probes
-    app.get(mcpPath, (req: Request, res: Response, next: NextFunction) => {
-      console.log(`[MCP DEBUG - GET /mcp Probe V2] Headers:`, JSON.stringify(req.headers, null, 2)); // Added V2
-      if (!req.headers.accept?.includes('text/event-stream')) {
-        console.log('[MCP DEBUG - GET /mcp Probe V2] Not an event-stream request. Responding 200 OK (sendStatus).');
-        return res.sendStatus(200);
-      }
-      console.log('[MCP DEBUG - GET /mcp Probe V2] Event-stream request, passing to main handler.');
-      next();
-    });
-
-    // --- Create Single Transport Instance --- 
+    // --- Create Single Transport Instance (remains the same) --- 
     console.log('[MCP Setup] Creating main StreamableHTTPServerTransport instance...');
     mainTransportInstance = new StreamableHTTPServerTransport({
       sessionIdGenerator: generateSessionId,
@@ -127,21 +100,15 @@ async function startApp() {
       },
     });
 
-    // --- Create Single McpServer Instance --- 
+    // --- Create Single McpServer Instance (remains the same) --- 
     console.log('[MCP Setup] Creating single McpServer instance...');
     singleMcpServer = await createMcpServerInstance();
 
-    // --- Connect McpServer to Transport (ONCE) --- 
+    // --- Connect McpServer to Transport (ONCE - remains the same) --- 
     console.log('[MCP Setup] Connecting single McpServer to main transport...');
-    // This is where McpServer internally sets up its listeners on the transport (e.g., transport.onmessage)
-    // to handle messages for all relevant sessions it's aware of.
     await singleMcpServer.connect(mainTransportInstance);
     console.log('[MCP Setup] Single McpServer connected to main transport.');
     
-    // We do NOT set mainTransportInstance.onmessage here.
-    // We rely on singleMcpServer.connect() to have configured the transport appropriately.
-
-    // Set general transport error/close handlers if needed for logging or global cleanup
     mainTransportInstance.onerror = (error: Error) => {
         console.error('[MCP Transport - onerror] Transport-level error:', error);
     };
@@ -149,35 +116,21 @@ async function startApp() {
         console.log('[MCP Transport - onclose] Main transport connection closed/terminated by transport itself.');
     };
 
-    // Start the transport (may be a no-op for streamableHttp, but good practice)
-    // Removed explicit mainTransportInstance.start() call here as McpServer.connect() handles it.
-
-    // 5) Finally, forward everything to the transport
-    app.all(mcpPath, async (req: Request, res: Response) => {
-      // Removed previous detailed logging from inside this specific app.all handler
-      // console.log(
-      //   `[MCP DEBUG - app.all] INCOMING: ${req.method} ${req.originalUrl} from ${req.ip}`,
-      //   { headers: JSON.stringify(req.headers, null, 2), body: JSON.stringify(req.body, null, 2) }
-      // );
-
-      // console.log(`[Express Route - ${req.method} ${mcpPath}] Forwarding request to main MCP transport.`); // This log also becomes redundant due to above middleware logging
-      if (!mainTransportInstance) {
-          console.error('[Express Route] Main transport not initialized! This should not happen.');
+    // --- Simplified Express Route for MCP (sole handler for /mcp) ---
+    app.all(mcpPath, (req: Request, res: Response) => {
+      if (!mainTransportInstance) { // Keep this safety check
+          console.error('[Express Route /mcp] Main transport not initialized! This should not happen.');
           if (!res.headersSent) res.status(503).send('MCP Service Unavailable');
           return;
       }
-      try {
-        // The req.body should already be parsed by the global express.json()
-        await mainTransportInstance.handleRequest(
-          req as IncomingMessage & { auth?: Record<string, unknown> | undefined }, 
-          res as ServerResponse
-        );
-      } catch (error) {
-        console.error(`[Express Route - ${mcpPath}] Error during transport.handleRequest:`, error);
-        if (!res.headersSent) {
-          res.status(500).send('Internal Server Error while handling MCP request.');
-        }
-      }
+      mainTransportInstance.handleRequest(
+        req as IncomingMessage & { auth?: Record<string, unknown> | undefined }, 
+        res as ServerResponse
+        // No third argument (parsedBody), transport will handle parsing
+      ).catch(err => {
+        console.error('[MCP Transport Error - app.all /mcp]', err);
+        if (!res.headersSent) res.status(500).send('MCP transport failure');
+      });
     });
 
     app.get('/', (req: Request, res: Response) => {
