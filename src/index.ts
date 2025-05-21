@@ -150,20 +150,20 @@ async function startApp() {
     const mcpPath = '/mcp'; // Declare mcpPath before it is used by app.options
     app.options(mcpPath, cors({ origin: true, credentials: true })); // Restore original OPTIONS handler
 
-    // TEMPORARY DIAGNOSTIC: More permissive OPTIONS handler for /mcp
-    // app.options(mcpPath, (req: Request, res: Response) => { // Keep this commented out
+    // TEMPORARY DIAGNOSTIC: More permissive OPTIONS handler for /mcp (NOW COMMENTED OUT/REVERTED)
+    // app.options(mcpPath, (req: Request, res: Response) => {
     //   const origin = req.headers.origin || '*';
     //   console.log(`[Express /mcp OPTIONS - DIAGNOSTIC] route hit from ${origin}. Responding with permissive headers.`);
     //   res.header('Access-Control-Allow-Origin', origin); 
     //   res.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     //   res.header('Access-Control-Allow-Headers', 'Content-Type, mcp-session-id, Authorization, X-MCP-Client-Name, X-MCP-Client-Version');
     //   res.header('Access-Control-Allow-Credentials', 'true');
-    //   res.header('Access-Control-Max-Age', '86400');
+    //   res.header('Access-Control-Max-Age', '86400'); 
     //   res.sendStatus(204); 
     // });
 
     const port = Number(process.env.PORT) || 8000;
-    // const mcpPath = '/mcp'; // Original declaration position, now moved up
+    // const mcpPath = '/mcp'; // This line was the duplicate/later declaration and is correctly removed
 
     // Middleware to log raw body for /mcp POST requests
     app.use(mcpPath, (req: Request, res: Response, next: NextFunction) => {
