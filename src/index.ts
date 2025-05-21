@@ -141,10 +141,24 @@ async function startApp() {
       credentials: true, 
       exposedHeaders: ['mcp-session-id'] 
     }));
-    app.options('/mcp', cors({ origin: true, credentials: true }));
+    // app.options(mcpPath, cors({ origin: true, credentials: true })); // Original OPTIONS handler
+
+    const mcpPath = '/mcp'; // Declare mcpPath earlier
+
+    // TEMPORARY DIAGNOSTIC: More permissive OPTIONS handler for /mcp
+    app.options(mcpPath, (req: Request, res: Response) => {
+      const origin = req.headers.origin || '*';
+      console.log(`[Express /mcp OPTIONS - DIAGNOSTIC] route hit from ${origin}. Responding with permissive headers.`);
+      res.header('Access-Control-Allow-Origin', origin); 
+      res.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, mcp-session-id, Authorization, X-MCP-Client-Name, X-MCP-Client-Version'); // Added more common MCP headers
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Access-Control-Max-Age', '86400'); // Optional: Cache preflight for 1 day
+      res.sendStatus(204); // No Content - Standard for successful preflight
+    });
 
     const port = Number(process.env.PORT) || 8000;
-    const mcpPath = '/mcp';
+    // const mcpPath = '/mcp'; // Original declaration position, now moved up
 
     // Middleware to log raw body for /mcp POST requests
     app.use(mcpPath, (req: Request, res: Response, next: NextFunction) => {
