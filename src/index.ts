@@ -35,17 +35,64 @@ async function createMcpServerInstance(): Promise<McpServer> {
   serverInstance.tool(
     UNIFIED_SOCRATA_TOOL.name,
     socrataToolZodSchema, // Provide the Zod schema itself to the SDK
-    async (parsedParams: SocrataToolParams, context: McpToolHandlerContext) => { // Uses global McpToolHandlerContext
+    async (rawRequestPayload: SocrataToolParams, context: McpToolHandlerContext) => { // Uses global McpToolHandlerContext
       console.log(
-        `[MCP SDK Handler] Parsed params received from SDK:`,
-        JSON.stringify(parsedParams, null, 2)
+        `[MCP SDK Handler] RAW first argument (rawRequestPayload) received from SDK:`,
+        JSON.stringify(rawRequestPayload, null, 2)
       );
-      console.log(`[MCP SDK Handler] Context session ID: ${context.sessionId}`); // Should work now
+      console.log(`[MCP SDK Handler] Context session ID: ${context.sessionId}`);
+
+      let toolArguments: Record<string, unknown> | undefined = undefined;
+
+      // Attempt to locate the actual tool arguments
+      // Based on common patterns, they might be in rawRequestPayload.arguments or rawRequestPayload.params
+      // Or rawRequestPayload itself might be the arguments if the client sends them flat.
+      if (rawRequestPayload && typeof rawRequestPayload === 'object') {
+        if ('arguments' in rawRequestPayload && typeof rawRequestPayload.arguments === 'object' && rawRequestPayload.arguments !== null) {
+          console.log('[MCP SDK Handler] Found "arguments" field in rawRequestPayload. Assuming these are the tool arguments.');
+          toolArguments = rawRequestPayload.arguments as Record<string, unknown>;
+        } else if ('params' in rawRequestPayload && typeof rawRequestPayload.params === 'object' && rawRequestPayload.params !== null) {
+          // This was the previous Zod error case: the schema expected 'type' and 'query' at top level
+          // If rawRequestPayload.params contains 'type' and 'query', this could be it.
+          console.log('[MCP SDK Handler] Found "params" field in rawRequestPayload. Inspecting as potential tool arguments.');
+          toolArguments = rawRequestPayload.params as Record<string, unknown>;
+        } else if ('type' in rawRequestPayload && 'query' in rawRequestPayload) {
+          // If 'type' and 'query' are directly in rawRequestPayload, then it might be the arguments directly
+          console.log('[MCP SDK Handler] Found "type" and "query" directly in rawRequestPayload. Assuming rawRequestPayload ARE the tool arguments.');
+          toolArguments = rawRequestPayload as unknown as Record<string, unknown>; // Cast needed due to SocrataToolParams type
+        } else {
+          console.log('[MCP SDK Handler] Tool arguments not found in .arguments, .params, or directly in rawRequestPayload. Logging keys for inspection:');
+          console.log(Object.keys(rawRequestPayload));
+          // Default to trying rawRequestPayload, which will likely fail Zod parsing but show the error.
+          toolArguments = rawRequestPayload as unknown as Record<string, unknown>;
+        }
+      } else {
+         console.log('[MCP SDK Handler] rawRequestPayload is not an object or is null. Cannot extract arguments.');
+         // This will definitely fail parsing and error out, which is informative.
+         toolArguments = rawRequestPayload as unknown as Record<string, unknown>;
+      }
+
+      if (toolArguments === undefined) {
+        console.error('[MCP SDK Handler] Critical: toolArguments resolved to undefined. This should not happen.');
+        // Return an error, as we can't proceed.
+        return { 
+          content: [{ type: 'text', text: 'Error: Could not determine tool arguments from request.' }], 
+          isError: true 
+        };
+      }
+      
+      console.log('[MCP SDK Handler] Attempting to parse:', JSON.stringify(toolArguments, null, 2));
 
       try {
+        // Now, parse the located toolArguments using the Zod schema
+        const parsedToolSpecificParams = socrataToolZodSchema.parse(toolArguments);
+        console.log(
+          `[MCP SDK Handler] Successfully parsed tool-specific parameters:`,
+          JSON.stringify(parsedToolSpecificParams, null, 2)
+        );
+
         if (UNIFIED_SOCRATA_TOOL.handler) {
-          // Pass the already parsed parameters to the tool's specific handler
-          const result = await UNIFIED_SOCRATA_TOOL.handler(parsedParams);
+          const result = await UNIFIED_SOCRATA_TOOL.handler(parsedToolSpecificParams); // Pass the truly parsed params
           return { content: [{ type: 'json', json: result }], isError: false };
         } else {
           throw new Error ('Tool handler not defined for UNIFIED_SOCRATA_TOOL');
