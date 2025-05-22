@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
 import type { Express } from 'express';
 import request from 'supertest';
@@ -22,7 +22,7 @@ describe('MCP Protocol Sequence', () => {
     app.use(express.json());
 
     // Set up the MCP server routes similar to index.ts
-    const transports: Record<string, SSEServerTransport> = {};
+    const transports: Record<string, StreamableHTTPServerTransport> = {};
 
     app.get(SSE_PATH, async (req, res) => {
       res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -48,7 +48,7 @@ describe('MCP Protocol Sequence', () => {
         async () => ({ content: [{ type: 'text', text: 'pong_minimal' }] })
       );
 
-      const transport = new SSEServerTransport(MESSAGES_PATH, res);
+      const transport = new StreamableHTTPServerTransport(MESSAGES_PATH, res);
       sessionId = transport.sessionId;
       transports[sessionId] = transport;
 
