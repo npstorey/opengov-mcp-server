@@ -76,3 +76,4 @@ The original `srobbin/opengov-mcp-server` used `StdioServerTransport`, which is 
 The immediate next step is to ensure the `ListToolsRequestSchema` handler is correctly invoked after a successful `initialize` handshake when using `StreamableHTTPServerTransport` and that the tool list it provides is accepted by Claude.ai, enabling the tools. This involves careful logging and comparison with official SDK examples for `StreamableHTTPServerTransport`.
 
 Refer to the project's issue tracker and commit history for detailed troubleshooting attempts.
+\n### Future Transport\nThe server now loads `currentTransport` from `src/mcp/transport/streamableHttp.ts`. Replace this module in the future to switch protocols without touching the rest of the code.

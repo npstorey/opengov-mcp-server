@@ -2,7 +2,7 @@
 
 // import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'; // Will be replaced
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'; // Low-level server
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { currentTransport, type Transport } from './mcp/transport/streamableHttp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import express from 'express';
 import type { Request, Response } from 'express';
@@ -135,7 +135,7 @@ function generateSessionId(): string {
 }
 
 async function startApp() {
-  let mainTransportInstance: StreamableHTTPServerTransport | undefined = undefined;
+  let mainTransportInstance: Transport | undefined = undefined;
   // let singleMcpServer: McpServer | undefined = undefined; // Will be replaced
   let lowLevelServer: Server | undefined = undefined; // New server instance variable
   const sseTransports: Record<string, SSEServerTransport> = {};
@@ -178,16 +178,16 @@ async function startApp() {
     });
 
     // --- Create Single Transport Instance (remains the same) --- 
-    console.log('[MCP Setup] Creating main StreamableHTTPServerTransport instance...');
-    mainTransportInstance = new StreamableHTTPServerTransport({
-      sessionIdGenerator: generateSessionId,
-      onsessioninitialized: (sessionId: string) => {
+    console.log('[MCP Setup] Creating main transport instance...');
+    mainTransportInstance = currentTransport;
+    if ('onsessioninitialized' in (mainTransportInstance as any)) {
+      (mainTransportInstance as any).onsessioninitialized = (sessionId: string) => {
         console.log('[MCP Transport] Session initialized:', sessionId);
-      },
-    });
+      };
+    }
 
     // Assign onmessage handler directly to the instance for inspection
-    mainTransportInstance.onmessage = (message: any, extra?: { authInfo?: any; sessionId?: string }) => {
+    (mainTransportInstance as any).onmessage = (message: any, extra?: { authInfo?: any; sessionId?: string }) => {
       console.log('[MCP Transport - onmessage V2] Received message:', JSON.stringify(message, null, 2));
       if (extra) {
         console.log('[MCP Transport - onmessage V2] Extra info:', JSON.stringify(extra, null, 2));
@@ -203,13 +203,13 @@ async function startApp() {
     // --- Connect McpServer to Transport (ONCE - remains the same) --- 
     console.log('[MCP Setup] Connecting single Server (low-level) to main transport...');
     // await singleMcpServer.connect(mainTransportInstance); // Will be replaced
-    await lowLevelServer.connect(mainTransportInstance!);
+    await lowLevelServer.connect(mainTransportInstance as any);
     console.log('[MCP Setup] Single Server (low-level) connected to main transport.');
     
-    mainTransportInstance.onerror = (error: Error) => {
+    (mainTransportInstance as any).onerror = (error: Error) => {
         console.error('[MCP Transport - onerror] Transport-level error:', error);
     };
-    mainTransportInstance.onclose = () => {
+    (mainTransportInstance as any).onclose = () => {
         console.log('[MCP Transport - onclose] Main transport connection closed/terminated by transport itself.');
     };
 
@@ -228,7 +228,7 @@ async function startApp() {
           if (!res.headersSent) res.status(503).send('MCP Service Unavailable');
           return;
       }
-      mainTransportInstance.handleRequest(
+      (mainTransportInstance as any).handleRequest(
         req as IncomingMessage & { auth?: Record<string, unknown> | undefined },
         res as ServerResponse
       ).catch(err => {
@@ -301,7 +301,7 @@ async function startApp() {
       }
       if (mainTransportInstance) {
         console.log('Closing main transport...');
-        await mainTransportInstance.close().catch(e => console.error('Error closing main transport:', e));
+        await mainTransportInstance.stop().catch(e => console.error('Error closing main transport:', e));
       }
       httpServer.close(() => {
         console.log('HTTP server closed.');
@@ -319,7 +319,7 @@ async function startApp() {
     // }
     // No specific close for lowLevelServer here yet, transport handles it.
     if (mainTransportInstance) {
-      await mainTransportInstance.close().catch(e => console.error('Error closing main transport during fatal startup error:', e));
+      await mainTransportInstance.stop().catch(e => console.error('Error closing main transport during fatal startup error:', e));
     }
     process.exit(1);
   }
