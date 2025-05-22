@@ -40,7 +40,7 @@ The original `srobbin/opengov-mcp-server` used `StdioServerTransport`, which is 
 *   **Node.js:** Version 18.19.1 (as per Render environment)
 *   **TypeScript:** For type safety and modern JavaScript features.
 *   **ES Modules (`type: "module"`):** In `package.json`.
-*   **`@modelcontextprotocol/sdk`:** Currently targeting version `1.11.4`.
+*   **`@modelcontextprotocol/sdk`:** Currently targeting version `1.11.5`.
 *   **HTTP Transport:** Currently implementing `StreamableHTTPServerTransport` with `express`.
 *   **Build Process:** `npm run build` (which runs `tsc`).
 *   **Deployment Platform:** Render.com (as a Web Service).
