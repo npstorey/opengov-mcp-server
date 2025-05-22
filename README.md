@@ -2,7 +2,7 @@
 
 This project is a fork of Scott Robbin's original [srobbin/opengov-mcp-server](https://github.com/srobbin/opengov-mcp-server). The primary goal of this fork is to adapt the server for deployment as a **remote, HTTP-based Model Context Protocol (MCP) server**, suitable for platforms like Render.com, rather than solely local command-line (stdio) execution.
 
-The aim is to enable MCP clients (like Claude.ai or Claude Desktop configured for remote servers) to connect over the internet and utilize the Socrata Open Data API integration provided by this server.
+The aim is to enable MCP clients (like Claude.ai or Claude Desktop configured for remote servers) to connect over the internet and utilize the Socrata Open Data API integration provided by this server. The server exposes its MCP API through a **Streamable HTTP endpoint at `/mcp`**.
 
 ## Original Project Overview
 
@@ -26,7 +26,7 @@ As of the last update, the project has successfully:
 *   Been configured to build with `tsc` outputting to a `dist` directory.
 *   Attempted integration with both `@modelcontextprotocol/sdk`'s `StreamableHTTPServerTransport` and `StreamableHTTPServerTransport` using `express` for the HTTP layer.
 *   Successfully deployed to Render.com where the basic Express server starts and listens on the assigned port, passing Render's health checks (when a `/` root endpoint is provided).
-*   Confirmed that Claude.ai can make an initial connection to the deployed server's SSE endpoint.
+*   Confirmed that Claude.ai can make an initial connection to the server's Streamable HTTP endpoint at `/mcp`.
 
 The primary ongoing challenge is ensuring that after the initial MCP `initialize` handshake, Claude.ai successfully receives the list of available tools and enables them, rather than showing them as "Disabled." This involves:
 *   Correctly implementing the chosen HTTP transport (`StreamableHTTPServerTransport` is the current focus due to SDK documentation and file packaging observations).
@@ -40,7 +40,7 @@ The original `srobbin/opengov-mcp-server` used `StdioServerTransport`, which is 
 *   **Node.js:** Version 18.19.1 (as per Render environment)
 *   **TypeScript:** For type safety and modern JavaScript features.
 *   **ES Modules (`type: "module"`):** In `package.json`.
-*   **`@modelcontextprotocol/sdk`:** Currently targeting version `1.11.4`.
+*   **`@modelcontextprotocol/sdk`:** Currently targeting version `1.11.5`.
 *   **HTTP Transport:** Currently implementing `StreamableHTTPServerTransport` with `express`.
 *   **Build Process:** `npm run build` (which runs `tsc`).
 *   **Deployment Platform:** Render.com (as a Web Service).
