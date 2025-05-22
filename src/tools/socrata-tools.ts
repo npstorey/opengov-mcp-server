@@ -182,7 +182,7 @@ async function handleColumnInfo(params: {
 async function handleDataAccess(params: {
   datasetId: string;
   domain?: string;
-  query?: string;
+  soqlQuery?: string;
   limit?: number;
   offset?: number;
   select?: string;
@@ -195,7 +195,7 @@ async function handleDataAccess(params: {
   const {
     datasetId,
     domain = getDefaultDomain(),
-    query,
+    soqlQuery,
     limit = 10,
     offset = 0,
     select,
@@ -206,16 +206,13 @@ async function handleDataAccess(params: {
     q
   } = params;
 
-  const apiParams: Record<string, unknown> = {
-    $limit: limit,
-    $offset: offset,
-  };
+  const apiParams: Record<string, unknown> = {};
 
-  // Handle comprehensive query parameter if provided
-  if (query) {
-    apiParams.$query = query;
+  if (soqlQuery && soqlQuery.trim().length > 0) {
+    apiParams.$query = soqlQuery;
   } else {
-    // Otherwise handle individual SoQL parameters
+    apiParams.$limit = limit;
+    apiParams.$offset = offset;
     if (select) apiParams.$select = select;
     if (where) apiParams.$where = where;
     if (order) apiParams.$order = order;
@@ -255,8 +252,8 @@ async function handleSiteMetrics(params: {
 export const socrataToolZodSchema = z.object({
   type: z.enum(['catalog','metadata','query','metrics'])
          .describe('Operation to perform'),
-  query: z.string().min(1)
-         .describe('Search phrase, dataset id, or SoQL string'),
+  query: z.string().min(1).optional()
+         .describe('General search phrase OR a full SoQL query string. If this is a full SoQL query (e.g., starts with SELECT), other SoQL parameters like select, where, q might be overridden or ignored by the handler in favor of the full SoQL query. If it\'s a search phrase, it will likely be used for a full-text search ($q parameter to Socrata).'),
   // Optional parameters - these should also be in jsonParameters if they are to be exposed to the client
   domain: z.string().optional().describe('The Socrata domain (e.g., data.cityofnewyork.us)'),
   limit: z.number().int().positive().optional().describe('Number of results to return'),
@@ -286,7 +283,7 @@ const jsonParameters: JsonSchema7Type = {
     query: {
       type: 'string',
       minLength: 1,
-      description: 'Search phrase, dataset id, or SoQL string'
+      description: 'General search phrase OR a full SoQL query string. If this is a full SoQL query (e.g., starts with SELECT), other SoQL parameters like select, where, q might be overridden or ignored by the handler in favor of the full SoQL query. If it\'s a search phrase, it will likely be used for a full-text search ($q parameter to Socrata).'
     },
     // Optional parameters reflected from socrataToolZodSchema
     domain: {
@@ -330,7 +327,7 @@ const jsonParameters: JsonSchema7Type = {
       description: 'Full-text search query within the dataset (used in data access)'
     }
   },
-  required: ['type', 'query']
+  required: ['type']
 };
 
 // 3️⃣ Tool uses the manually crafted JSON schema
@@ -393,21 +390,62 @@ export async function handleSocrataTool(
         domain: modifiableParams.domain 
       });
     case 'query': // This corresponds to 'data-access'
-      console.warn("[handleSocrataTool] 'query' case needs review: mapping generic 'query' to data access parameters.");
-      // Ensure datasetId is passed; prefer params.datasetId if available, else use query.
-      if (!(modifiableParams.datasetId || query)) throw new Error('Dataset ID (from query or datasetId field) is required for type=query (data-access)');
-      return handleDataAccess({ 
-        datasetId: modifiableParams.datasetId || query, // Use query as fallback for datasetId
-        domain: modifiableParams.domain,
-        query: modifiableParams.query, // This can be the SoQL $query
-        limit: modifiableParams.limit,
-        offset: modifiableParams.offset,
-        select: modifiableParams.select,
-        where: modifiableParams.where,
-        order: modifiableParams.order,
-        group: modifiableParams.group,
-        having: modifiableParams.having,
-        q: modifiableParams.q // This is for full-text search within dataset, distinct from $query
+      const {
+        datasetId: dsId,
+        query: queryField,
+        domain: domainField,
+        limit: limitField,
+        offset: offsetField,
+        select: selectField,
+        where: whereField,
+        order: orderField,
+        group: groupField,
+        having: havingField,
+        q: zodQ
+      } = modifiableParams;
+
+      let effectiveDatasetId = dsId;
+      if (!effectiveDatasetId && queryField && !/^\s*select/i.test(queryField)) {
+        effectiveDatasetId = queryField;
+      }
+      if (!effectiveDatasetId) {
+        throw new Error('Dataset ID (from datasetId field, or from query field if not a SoQL SELECT) is required for type=query operation.');
+      }
+
+      let passAsSoqlQuery: string | undefined = undefined;
+      let passAsSelect = selectField;
+      let passAsWhere = whereField;
+      let passAsOrder = orderField;
+      let passAsGroup = groupField;
+      let passAsHaving = havingField;
+      let passAsQ = zodQ;
+
+      if (queryField && /^\s*select/i.test(queryField)) {
+        passAsSoqlQuery = queryField;
+        passAsSelect = undefined;
+        passAsWhere = undefined;
+        passAsOrder = undefined;
+        passAsGroup = undefined;
+        passAsHaving = undefined;
+        passAsQ = undefined;
+        console.log('[handleSocrataTool] Received full SoQL query in "query" field; ignoring select/where/order/group/having/q parameters.');
+      } else if (queryField) {
+        passAsQ = queryField;
+        console.log('[handleSocrataTool] Treating "query" field as general search term mapped to $q parameter.');
+      }
+
+      return handleDataAccess({
+        datasetId: effectiveDatasetId,
+        domain: domainField,
+        soqlQuery: passAsSoqlQuery,
+        limit: limitField,
+        offset: offsetField,
+        select: passAsSelect,
+        where: passAsWhere,
+        order: passAsOrder,
+        group: passAsGroup,
+        having: passAsHaving,
+        q: passAsQ
       });
     case 'metrics':
       return handleSiteMetrics({ domain: modifiableParams.domain });
