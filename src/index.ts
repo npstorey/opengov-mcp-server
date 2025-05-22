@@ -3,6 +3,7 @@
 // import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'; // Will be replaced
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'; // Low-level server
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import express from 'express';
 import type { Request, Response } from 'express';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -137,6 +138,7 @@ async function startApp() {
   let mainTransportInstance: StreamableHTTPServerTransport | undefined = undefined;
   // let singleMcpServer: McpServer | undefined = undefined; // Will be replaced
   let lowLevelServer: Server | undefined = undefined; // New server instance variable
+  const sseTransports: Record<string, SSEServerTransport> = {};
 
   try {
     const app = express();
@@ -150,6 +152,9 @@ async function startApp() {
     }));
     const mcpPath = '/mcp'; // Declare mcpPath before it is used by app.options
     app.options(mcpPath, cors({ origin: true, credentials: true })); // Restore original OPTIONS handler
+
+    const ssePath = '/mcp-sse';
+    app.options(ssePath, cors({ origin: true, credentials: true }));
 
     // TEMPORARY DIAGNOSTIC: More permissive OPTIONS handler for /mcp (NOW COMMENTED OUT/REVERTED)
     // app.options(mcpPath, (req: Request, res: Response) => {
@@ -224,12 +229,49 @@ async function startApp() {
           return;
       }
       mainTransportInstance.handleRequest(
-        req as IncomingMessage & { auth?: Record<string, unknown> | undefined }, 
+        req as IncomingMessage & { auth?: Record<string, unknown> | undefined },
         res as ServerResponse
       ).catch(err => {
         console.error('[transport]', err);
         if (!res.headersSent) res.status(500).end();
       });
+    });
+
+    // Legacy SSE transport endpoint
+    app.all(ssePath, (req: Request, res: Response) => {
+      console.log(`[Express /mcp-sse ENTRY] Method: ${req.method}, URL: ${req.originalUrl}, Origin: ${req.headers.origin}`);
+
+      if (req.method === 'GET') {
+        const transport = new SSEServerTransport(ssePath, res as ServerResponse);
+        sseTransports[transport.sessionId] = transport;
+        transport.onclose = () => {
+          delete sseTransports[transport.sessionId];
+        };
+        console.log('[SSE ] session', transport.sessionId);
+        if (lowLevelServer) {
+          (lowLevelServer as any).connect(transport as any).catch(err => {
+            console.error('[transport]', err);
+            if (!res.headersSent) res.status(500).end();
+          });
+        }
+      } else if (req.method === 'POST') {
+        const sessionId = req.query.sessionId as string;
+        const transport = sseTransports[sessionId];
+        if (!transport) {
+          if (!res.headersSent) res.status(400).send('No transport found for sessionId');
+          return;
+        }
+        (transport as any).handlePostMessage(
+          req as any,
+          res as ServerResponse,
+          req.body
+        ).catch(err => {
+          console.error('[transport]', err);
+          if (!res.headersSent) res.status(500).end();
+        });
+      } else {
+        if (!res.headersSent) res.status(405).end();
+      }
     });
 
     /* ── 3.  Body-parser for everything ELSE ───────────────── */
