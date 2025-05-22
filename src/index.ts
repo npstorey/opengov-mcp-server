@@ -92,14 +92,28 @@ async function createLowLevelServerInstance(): Promise<Server> { // Return type 
         }
 
         const toolResult = await UNIFIED_SOCRATA_TOOL.handler(parsedSocrataParams);
-        console.log(`[Server - CallTool] Tool ${toolName} executed. Result:`, JSON.stringify(toolResult, null, 2));
-        
-        // Construct the JSON-RPC success response
+        console.log(`[Server - CallTool] Tool ${toolName} executed. Original Result (type ${typeof toolResult}):`, JSON.stringify(toolResult, null, 2));
+
+        let responseText: string;
+        if (toolResult === null || toolResult === undefined) {
+          responseText = String(toolResult);
+        } else if (typeof toolResult === 'string') {
+          responseText = toolResult;
+        } else if (typeof toolResult === 'number' || typeof toolResult === 'boolean') {
+          responseText = toolResult.toString();
+        } else {
+          try {
+            responseText = JSON.stringify(toolResult, null, 2);
+          } catch (stringifyError) {
+            console.error('[Server - CallTool] Error stringifying toolResult:', stringifyError);
+            responseText = `Error: Could not convert tool result to a displayable string. Original type: ${typeof toolResult}. Stringify error: ${stringifyError instanceof Error ? stringifyError.message : String(stringifyError)}`;
+          }
+        }
+
+        console.log(`[Server - CallTool] Sending result as text content.`);
         return {
-          // No jsonrpc or id field here, the Server class wraps this in the full JSON-RPC response.
-          // This return is just the 'result' field of the JSON-RPC response.
-          content: [{ type: 'json', json: toolResult }], 
-          isError: false // MCP-specific part of the result content for tools
+          content: [{ type: 'text', text: responseText }],
+          isError: false
         };
 
       } catch (error: unknown) {
