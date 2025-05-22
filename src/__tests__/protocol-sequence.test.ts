@@ -13,80 +13,47 @@ describe('MCP Protocol Sequence', () => {
   let eventSource: EventSource;
   const PORT = 8001;
   const BASE_URL = `http://localhost:${PORT}`;
-  const SSE_PATH = '/mcp/sse';
-  const MESSAGES_PATH = '/mcp/messages';
+  const MCP_PATH = '/mcp';
   let sessionId: string;
 
   beforeEach(async () => {
     app = express();
-    app.use(express.json());
 
-    // Set up the MCP server routes similar to index.ts
-    const transports: Record<string, StreamableHTTPServerTransport> = {};
-
-    app.get(SSE_PATH, async (req, res) => {
-      res.setHeader('Cache-Control', 'no-cache, no-transform');
-      res.setHeader('Connection', 'keep-alive');
-      res.setHeader('X-Accel-Buffering', 'no');
-
-      const mcpServer = new McpServer(
-        {
-          name: 'test-mcp-server',
-          version: '0.1.1',
+    // Set up the MCP server routes similar to index.ts using Streamable HTTP
+    const mcpServer = new McpServer(
+      {
+        name: 'test-mcp-server',
+        version: '0.1.1',
+      },
+      {
+        capabilities: {
+          tools: {},
         },
-        {
-          capabilities: {
-            tools: {},
-          },
-        }
-      );
-
-      mcpServer.tool(
-        'ping',
-        'p',
-        {},
-        async () => ({ content: [{ type: 'text', text: 'pong_minimal' }] })
-      );
-
-      const transport = new StreamableHTTPServerTransport(MESSAGES_PATH, res);
-      sessionId = transport.sessionId;
-      transports[sessionId] = transport;
-
-      try {
-        await mcpServer.connect(transport);
-      } catch (_error) {
-        if (!res.headersSent) {
-          res.status(500).send('Failed to establish MCP connection');
-        }
-        delete transports[sessionId];
-        return;
       }
+    );
 
-      req.on('close', () => {
-        delete transports[sessionId];
-      });
+    mcpServer.tool(
+      'ping',
+      'p',
+      {},
+      async () => ({ content: [{ type: 'text', text: 'pong_minimal' }] })
+    );
+
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => `s-${Math.random().toString(16).slice(2)}`,
+      onsessioninitialized: (id: string) => {
+        sessionId = id;
+      },
     });
 
-    app.post(MESSAGES_PATH, (req, res) => {
-      const reqSessionId = typeof req.query.sessionId === 'string' ? req.query.sessionId : undefined;
-      if (!reqSessionId) {
-        res.status(400).send('Missing sessionId');
-        return;
-      }
+    await mcpServer.connect(transport);
 
-      const transport = transports[reqSessionId];
-      if (!transport) {
-        res.status(404).send('Invalid sessionId');
-        return;
-      }
-
-      try {
-        transport.handlePostMessage(req, res, req.body);
-      } catch (_e) {
+    app.all(MCP_PATH, (req, res) => {
+      transport.handleRequest(req, res).catch(() => {
         if (!res.headersSent) {
-          res.status(500).send('Error processing message');
+          res.status(500).end();
         }
-      }
+      });
     });
 
     server = app.listen(PORT);
@@ -102,17 +69,10 @@ describe('MCP Protocol Sequence', () => {
   });
 
   it('should successfully complete the full MCP protocol sequence', async () => {
-    // Step 1: Establish SSE connection
-    eventSource = new EventSource(`${BASE_URL}${SSE_PATH}`);
-    
-    // Wait for connection to be established
-    await new Promise<void>((resolve) => {
-      eventSource.onopen = () => resolve();
-    });
-
-    // Step 2: Send initialize request
+    // Step 1: Send initialize request
     const initializeResponse = await request(app)
-      .post(`${MESSAGES_PATH}?sessionId=${sessionId}`)
+      .post(MCP_PATH)
+      .set('Accept', 'application/json, text/event-stream')
       .send({
         jsonrpc: '2.0',
         method: 'initialize',
@@ -126,6 +86,17 @@ describe('MCP Protocol Sequence', () => {
 
     expect(initializeResponse.status).toBe(200);
     expect(initializeResponse.body.result).toBeDefined();
+    sessionId = initializeResponse.headers['mcp-session-id'];
+
+    // Step 2: Establish SSE connection
+    eventSource = new EventSource(`${BASE_URL}${MCP_PATH}`, {
+      headers: { 'Mcp-Session-Id': sessionId }
+    } as any);
+
+    // Wait for connection to be established
+    await new Promise<void>((resolve) => {
+      eventSource.onopen = () => resolve();
+    });
 
     // Step 3: Wait for notifications/initialized
     await new Promise<void>((resolve) => {
@@ -139,7 +110,9 @@ describe('MCP Protocol Sequence', () => {
 
     // Step 4: Send tools/list request
     const listToolsResponse = await request(app)
-      .post(`${MESSAGES_PATH}?sessionId=${sessionId}`)
+      .post(MCP_PATH)
+      .set('Accept', 'application/json, text/event-stream')
+      .set('Mcp-Session-Id', sessionId)
       .send({
         jsonrpc: '2.0',
         method: 'tools/list',
@@ -154,7 +127,9 @@ describe('MCP Protocol Sequence', () => {
 
     // Step 5: Send tool/call request for ping
     const toolCallResponse = await request(app)
-      .post(`${MESSAGES_PATH}?sessionId=${sessionId}`)
+      .post(MCP_PATH)
+      .set('Accept', 'application/json, text/event-stream')
+      .set('Mcp-Session-Id', sessionId)
       .send({
         jsonrpc: '2.0',
         method: 'tool/call',
