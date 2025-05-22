@@ -15,7 +15,7 @@ The original server enables MCP clients to access Socrata Open Data APIs, allowi
 
 ## Goals of This Fork
 
-1.  **Remote Deployability:** Refactor the server to use an HTTP-based MCP transport (e.g., `SSEServerTransport` or `StreamableHTTPServerTransport` from the `@modelcontextprotocol/sdk`) to allow deployment as a web service.
+1.  **Remote Deployability:** Refactor the server to use an HTTP-based MCP transport (e.g., `StreamableHTTPServerTransport` or `StreamableHTTPServerTransport` from the `@modelcontextprotocol/sdk`) to allow deployment as a web service.
 2.  **Platform Compatibility:** Ensure the build process and runtime are compatible with cloud hosting platforms like Render.com.
 3.  **Robustness:** Implement necessary error handling and logging for a remote server environment.
 4.  **ESM & TypeScript:** Maintain the project as a Node.js application using ES Modules and TypeScript, with appropriate build configurations.
@@ -24,12 +24,12 @@ The original server enables MCP clients to access Socrata Open Data APIs, allowi
 
 As of the last update, the project has successfully:
 *   Been configured to build with `tsc` outputting to a `dist` directory.
-*   Attempted integration with both `@modelcontextprotocol/sdk`'s `StreamableHTTPServerTransport` and `SSEServerTransport` using `express` for the HTTP layer.
+*   Attempted integration with both `@modelcontextprotocol/sdk`'s `StreamableHTTPServerTransport` and `StreamableHTTPServerTransport` using `express` for the HTTP layer.
 *   Successfully deployed to Render.com where the basic Express server starts and listens on the assigned port, passing Render's health checks (when a `/` root endpoint is provided).
 *   Confirmed that Claude.ai can make an initial connection to the deployed server's SSE endpoint.
 
 The primary ongoing challenge is ensuring that after the initial MCP `initialize` handshake, Claude.ai successfully receives the list of available tools and enables them, rather than showing them as "Disabled." This involves:
-*   Correctly implementing the chosen HTTP transport (`SSEServerTransport` is the current focus due to SDK documentation and file packaging observations).
+*   Correctly implementing the chosen HTTP transport (`StreamableHTTPServerTransport` is the current focus due to SDK documentation and file packaging observations).
 *   Ensuring the `ListToolsRequestSchema` handler is correctly invoked and responds in the format expected by the client and the MCP SDK.
 *   Investigating the SDK's behavior regarding the `initialize` sequence and subsequent `listTools` requests over HTTP-based transports.
 
@@ -40,8 +40,8 @@ The original `srobbin/opengov-mcp-server` used `StdioServerTransport`, which is 
 *   **Node.js:** Version 18.19.1 (as per Render environment)
 *   **TypeScript:** For type safety and modern JavaScript features.
 *   **ES Modules (`type: "module"`):** In `package.json`.
-*   **`@modelcontextprotocol/sdk`:** Currently targeting version `1.9.0`.
-*   **HTTP Transport:** Currently implementing `SSEServerTransport` with `express`.
+*   **`@modelcontextprotocol/sdk`:** Currently targeting version `1.11.4`.
+*   **HTTP Transport:** Currently implementing `StreamableHTTPServerTransport` with `express`.
 *   **Build Process:** `npm run build` (which runs `tsc`).
 *   **Deployment Platform:** Render.com (as a Web Service).
 *   **Environment Variables on Render:**
@@ -73,6 +73,6 @@ The original `srobbin/opengov-mcp-server` used `StdioServerTransport`, which is 
 
 ## Next Steps in Troubleshooting
 
-The immediate next step is to ensure the `ListToolsRequestSchema` handler is correctly invoked after a successful `initialize` handshake when using `SSEServerTransport` and that the tool list it provides is accepted by Claude.ai, enabling the tools. This involves careful logging and comparison with official SDK examples for `SSEServerTransport`.
+The immediate next step is to ensure the `ListToolsRequestSchema` handler is correctly invoked after a successful `initialize` handshake when using `StreamableHTTPServerTransport` and that the tool list it provides is accepted by Claude.ai, enabling the tools. This involves careful logging and comparison with official SDK examples for `StreamableHTTPServerTransport`.
 
 Refer to the project's issue tracker and commit history for detailed troubleshooting attempts.

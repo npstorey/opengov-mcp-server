@@ -65,18 +65,6 @@ declare module '@modelcontextprotocol/sdk/server/index.js' {
   }
 }
 
-declare module '@modelcontextprotocol/sdk/server/sse.js' {
-  type ExpressRequest = import('express').Request;
-  type ExpressResponse = import('express').Response;
-
-  export class SSEServerTransport {
-    constructor(postMessagesUrl: string, res: ExpressResponse);
-    sessionId: string;
-    handlePostMessage(req: ExpressRequest, res: ExpressResponse, body?: any): void;
-    // Add other methods like 'close' if they are documented and needed
-    // close?(): void;
-  }
-}
 
 declare module '@modelcontextprotocol/sdk/server/streamableHttp.js' {
   // Use raw Node types as seen in the .d.ts
