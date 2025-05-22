@@ -48,7 +48,7 @@ async function createLowLevelServerInstance(): Promise<Server> { // Return type 
         {
           name: UNIFIED_SOCRATA_TOOL.name,
           description: UNIFIED_SOCRATA_TOOL.description,
-          parameters: UNIFIED_SOCRATA_TOOL.parameters, // For SDK v1.11.4 spec
+          parameters: UNIFIED_SOCRATA_TOOL.parameters, // For current SDK spec (v1.11.4)
           inputSchema: UNIFIED_SOCRATA_TOOL.parameters, // For MCP Inspector v0.8.2 compatibility
         },
       ],
