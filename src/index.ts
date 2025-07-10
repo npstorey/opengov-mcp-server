@@ -228,6 +228,15 @@ async function startApp() {
     };
 
     /* ── 2.  NO express.json() before /mcp!  ───────────────── */
+    // Accept-header shim for OpenAI connector
+    app.use(mcpPath, (req, _res, next) => {
+      const h = req.headers.accept ?? '';
+      if (!h.includes('text/event-stream')) {
+        req.headers.accept = h ? `${h}, text/event-stream` : 'text/event-stream';
+      }
+      next();
+    });
+
     app.all(mcpPath, (req: Request, res: Response) => {
       // Earliest log for any /mcp request
       console.log(`[Express /mcp ENTRY] Method: ${req.method}, URL: ${req.originalUrl}, Origin: ${req.headers.origin}`);
