@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { createSimpleHTTPServerTransport } from '@modelcontextprotocol/sdk';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import express, { type Request, type Response } from 'express';
 import dotenv from 'dotenv';
@@ -170,7 +170,13 @@ async function startApp() {
 
     // --- Create Single Transport Instance (remains the same) --- 
     console.log('[MCP Setup] Creating main transport instance...');
-    mainTransportInstance = createSimpleHTTPServerTransport();
+    mainTransportInstance = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => {
+        const sessionId = 'session-' + Math.random().toString(36).slice(2);
+        console.log('[Transport] Generated session ID:', sessionId);
+        return sessionId;
+      }
+    } as any);
     if ('onsessioninitialized' in mainTransportInstance) {
       mainTransportInstance.onsessioninitialized = (sessionId) => {
         console.log('[MCP Transport] Session initialized:', sessionId);
