@@ -3,6 +3,8 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "allowImportingTsExtensions": true,    // ← add
+    "resolvePackageJsonExports": false     // ← add
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,
