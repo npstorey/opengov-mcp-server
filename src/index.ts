@@ -180,6 +180,10 @@ async function startApp() {
       console.log('[MCP Setup] Transport created successfully');
       console.log('[MCP Setup] Transport type:', typeof mainTransportInstance);
       console.log('[MCP Setup] Transport handleRequest exists:', typeof mainTransportInstance?.handleRequest);
+      // Debug transport properties
+      console.log('[MCP Setup] Transport properties:', Object.keys(mainTransportInstance));
+      console.log('[MCP Setup] Transport has onsessioninitialized:', 'onsessioninitialized' in mainTransportInstance);
+      console.log('[MCP Setup] Transport has onmessage:', 'onmessage' in mainTransportInstance);
     } catch (err) {
       console.error('[MCP Setup] Error creating transport:', err);
       throw err;
@@ -251,7 +255,9 @@ async function startApp() {
         console.log('[Express /mcp] About to call handleRequest...');
         console.log('[Express /mcp] Transport instance:', typeof mainTransportInstance);
         console.log('[Express /mcp] handleRequest method exists:', typeof mainTransportInstance.handleRequest);
-        
+
+        // Add a simple wrapper to see what happens
+        const originalHandleRequest = mainTransportInstance.handleRequest.bind(mainTransportI
         const result = await mainTransportInstance.handleRequest(req, res);
         
         console.log('[Express /mcp] handleRequest returned:', result);
