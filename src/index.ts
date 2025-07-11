@@ -199,12 +199,19 @@ async function startApp() {
           break;
 
         default:
-          console.log('[MCP] Unknown method:', body.method);
-          res.json({
-            jsonrpc: '2.0',
-            id: body.id,
-            error: { code: -32601, message: 'Method not found' }
-          });
+          // Check if it's a notification (no id field)
+          if (!body.id && body.method?.startsWith('notifications/')) {
+            console.log('[MCP] Notification received:', body.method);
+            // Notifications don't get responses
+            res.status(204).end();
+          } else {
+            console.log('[MCP] Unknown method:', body.method);
+            res.json({
+              jsonrpc: '2.0',
+              id: body.id,
+              error: { code: -32601, message: 'Method not found' }
+            });
+          }
       }
     } catch (error) {
       console.error('[MCP] Error:', error);
