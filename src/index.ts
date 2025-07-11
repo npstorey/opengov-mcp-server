@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { ListToolsRequestSchema, CallToolRequestSchema, InitializeRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
@@ -29,6 +28,10 @@ async function createLowLevelServerInstance(): Promise<Server> {
     } // ServerOptions
   );
 
+  // Debug available methods
+  console.log('[Server Factory] Server methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(baseServer)));
+  console.log('[Server Factory] Server instance keys:', Object.keys(baseServer));
+
   // --- Handle ListTools --- 
   baseServer.setRequestHandler(ListToolsRequestSchema, async (request: any) => {
     console.log('[Server - ListTools] Received ListTools request:', JSON.stringify(request, null, 2));
@@ -42,22 +45,6 @@ async function createLowLevelServerInstance(): Promise<Server> {
           inputSchema: UNIFIED_SOCRATA_TOOL.parameters, // For MCP Inspector v0.8.2 compatibility
         },
       ],
-    };
-  });
-
-  // --- Handle Initialize --- 
-  baseServer.setRequestHandler(InitializeRequestSchema, async (request: any) => {
-    console.log('[Server - Initialize] Received initialize request:', JSON.stringify(request, null, 2));
-    
-    return {
-      protocolVersion: '0.1.0', // Use a version the SDK understands
-      capabilities: {
-        tools: {}
-      },
-      serverInfo: {
-        name: 'opengov-mcp-server',
-        version: '0.1.1'
-      }
     };
   });
 
@@ -249,54 +236,54 @@ async function startApp() {
 
     // Main MCP route with enhanced debugging
     app.all(mcpPath, async (req, res) => {
-  // Earliest log for any /mcp request
-  console.log(`[Express /mcp ENTRY] Method: ${req.method}, URL: ${req.originalUrl}, Origin: ${req.headers.origin}`);
-  console.log(`[Express /mcp ${req.method}] route hit. Headers:`, JSON.stringify(req.headers, null, 2));
-  
-  // Log body for POST requests
-  if (req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => {
-      body += chunk.toString();
-    });
-    req.on('end', () => {
-      console.log('[Express /mcp POST] Raw body:', body);
-    });
-  }
+      // Earliest log for any /mcp request
+      console.log(`[Express /mcp ENTRY] Method: ${req.method}, URL: ${req.originalUrl}, Origin: ${req.headers.origin}`);
+      console.log(`[Express /mcp ${req.method}] route hit. Headers:`, JSON.stringify(req.headers, null, 2));
+      
+      // Log body for POST requests
+      if (req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => {
+          body += chunk.toString();
+        });
+        req.on('end', () => {
+          console.log('[Express /mcp POST] Raw body:', body);
+        });
+      }
 
-  if (!mainTransportInstance) {
-    console.error('[Express Route /mcp] Main transport not initialized!');
-    if (!res.headersSent) res.status(503).send('MCP Service Unavailable');
-    return;
-  }
+      if (!mainTransportInstance) {
+        console.error('[Express Route /mcp] Main transport not initialized!');
+        if (!res.headersSent) res.status(503).send('MCP Service Unavailable');
+        return;
+      }
 
-  try {
-    console.log('[Express /mcp] About to call handleRequest...');
-    console.log('[Express /mcp] Transport instance:', typeof mainTransportInstance);
-    console.log('[Express /mcp] handleRequest method exists:', typeof mainTransportInstance.handleRequest);
-    
-    // Add a simple wrapper to see what happens
-    const originalHandleRequest = mainTransportInstance.handleRequest.bind(mainTransportInstance);
-    const result = await originalHandleRequest(req, res);
-    
-    console.log('[Express /mcp] handleRequest completed');
-    console.log('[Express /mcp] Result:', result);
-    console.log('[Express /mcp] Response headers sent:', res.headersSent);
-    console.log('[Express /mcp] Response status:', res.statusCode);
-  } catch (err: any) {
-    console.error('[Express /mcp] Error in handleRequest:', err);
-    console.error('[Express /mcp] Error name:', err?.name);
-    console.error('[Express /mcp] Error message:', err?.message);
-    console.error('[Express /mcp] Error stack:', err?.stack);
-    
-    if (!res.headersSent) {
-      res.status(500).json({ 
-        error: err?.message || 'Internal server error',
-        details: process.env.NODE_ENV === 'development' ? err?.stack : undefined
-      });
-    }
-  }
-});
+      try {
+        console.log('[Express /mcp] About to call handleRequest...');
+        console.log('[Express /mcp] Transport instance:', typeof mainTransportInstance);
+        console.log('[Express /mcp] handleRequest method exists:', typeof mainTransportInstance.handleRequest);
+        
+        // Add a simple wrapper to see what happens
+        const originalHandleRequest = mainTransportInstance.handleRequest.bind(mainTransportInstance);
+        const result = await originalHandleRequest(req, res);
+        
+        console.log('[Express /mcp] handleRequest completed');
+        console.log('[Express /mcp] Result:', result);
+        console.log('[Express /mcp] Response headers sent:', res.headersSent);
+        console.log('[Express /mcp] Response status:', res.statusCode);
+      } catch (err: any) {
+        console.error('[Express /mcp] Error in handleRequest:', err);
+        console.error('[Express /mcp] Error name:', err?.name);
+        console.error('[Express /mcp] Error message:', err?.message);
+        console.error('[Express /mcp] Error stack:', err?.stack);
+        
+        if (!res.headersSent) {
+          res.status(500).json({ 
+            error: err?.message || 'Internal server error',
+            details: process.env.NODE_ENV === 'development' ? err?.stack : undefined
+          });
+        }
+      }
+    });
 
     // Legacy SSE endpoint
     app.all(ssePath, express.json(), (req, res) => {
