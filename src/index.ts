@@ -72,35 +72,34 @@ async function createLowLevelServerInstance(): Promise<Server> {
   return baseServer;
 }
 
-/* ─── Server bootstrap ─────────────────────────────────────────────── */
+/* ─── Server bootstrap ───────────────────────────────────────────── */
 async function startApp() {
   /*
-   * NOTE:
-   *  • We create the Express instance.
-   *  • We add a permissive CORS layer *before* defining any routes.
-   *  • We declare the commonly-used constants (mcpPath, ssePath, port) up-front,
-   *    so every later reference is using exactly the same string.
+   * Create the Express app, add JSON body-parser (needed so POST /mcp
+   * supplies req.body), then CORS, and finally declare the common paths.
    */
   const app = express();
 
+  /* Parse JSON for every route (1 MB limit is plenty for JSON-RPC) */
+  app.use(express.json({ limit: '1mb' }));
+
+  /* CORS must come after body-parser but before any route definitions */
   app.use(
     cors({
-      origin: true,                    // reflect the caller’s Origin
-      credentials: true,               // allow cookies / auth headers
-      exposedHeaders: ['mcp-session-id'] // lets the client read this header
-    })
+      origin: true,                     // reflect caller’s Origin
+      credentials: true,                // allow cookies / auth headers
+      exposedHeaders: ['mcp-session-id'] // let client read this header
+    }),
   );
 
-  // ── Constants (keep these centralised) ────────────────────────────
-  const mcpPath = '/mcp';      // JSON-RPC 2.0 over HTTP or SSE fallback
-  const ssePath = '/mcp-sse';  // legacy Server-Sent Events endpoint
-  const port    = Number(process.env.PORT) || 10_000; // Render binds 0.0.0.0
+  // ── Constants (keep these centralised) ──────────────────────────
+  const mcpPath = '/mcp';     // JSON-RPC over HTTP + SSE fallback
+  const ssePath = '/mcp-sse'; // legacy SSE endpoint (optional)
+  const port    = Number(process.env.PORT) || 8000;
 
-  /* QUICK sanity-check in logs so we always know which build is running */
   console.log(
-    `[Bootstrap] starting OpenGov MCP @ :${port}  (paths: ${mcpPath}, ${ssePath})`
+    `[Bootstrap] OpenGov MCP starting on :${port}  (paths: ${mcpPath}, ${ssePath})`
   );
-
 
   /* health */
   app.get('/healthz', (_, res) => res.sendStatus(200));
