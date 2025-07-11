@@ -86,6 +86,7 @@ async function startApp() {
 
   /* main transport & server */
   const mainTransportInstance = currentTransport as StreamableHTTPServerTransport;
+  (mainTransportInstance as any).autoCreateSession = true;
   const server = await createLowLevelServerInstance();
   await server.connect(mainTransportInstance as any);
   console.log('[MCP] server connected ✅');
