@@ -44,6 +44,22 @@ async function createLowLevelServerInstance(): Promise<Server> {
     };
   });
 
+  // --- Handle Initialize --- 
+  baseServer.setRequestHandler({ method: 'initialize' } as any, async (request: any) => {
+    console.log('[Server - Initialize] Received initialize request:', JSON.stringify(request, null, 2));
+    
+    return {
+      protocolVersion: '0.1.0', // Use a version the SDK understands
+      capabilities: {
+        tools: {}
+      },
+      serverInfo: {
+        name: 'opengov-mcp-server',
+        version: '0.1.1'
+      }
+    };
+  });
+
   // --- Handle CallTool --- 
   baseServer.setRequestHandler(CallToolRequestSchema, async (request: any) => {
     console.log('[Server - CallTool] Received CallTool request:', JSON.stringify(request, null, 2));
@@ -168,6 +184,7 @@ async function startApp() {
     try {
       mainTransportInstance = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => {
+          console.log('[Transport] sessionIdGenerator called!');
           const sessionId = 'session-' + Math.random().toString(36).slice(2);
           console.log('[Transport] Generated session ID:', sessionId);
           return sessionId;
