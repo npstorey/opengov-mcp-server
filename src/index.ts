@@ -155,6 +155,7 @@ async function startApp() {
             }
           };
           
+          console.log('[MCP] Sending tools list response:', JSON.stringify(toolsResponse, null, 2));
           res.json(toolsResponse);
           console.log('[MCP] Sent tools list');
           break;
