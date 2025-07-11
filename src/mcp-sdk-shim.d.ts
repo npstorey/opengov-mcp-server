@@ -1,17 +1,28 @@
-/* Quick‑and‑dirty shim so tsc stops complaining about deep MCP paths. */
-/* Values are typed as any – you still get runtime behaviour, but skip errors. */
+/* Extremely permissive declarations so tsc stops complaining.
+   You still get runtime behaviour; add real typings later if you wish. */
 
 declare module '@modelcontextprotocol/sdk/dist/esm/server/index.js' {
-  export class Server {}
+  export class Server {
+    /* accept any constructor */
+    constructor(...args: any[]);
+    /* allow any property lookup */
+    [key: string]: any;
+  }
 }
 
 declare module '@modelcontextprotocol/sdk/dist/esm/server/streamableHttp.js' {
-  export class StreamableHTTPServerTransport {}
+  export class StreamableHTTPServerTransport {
+    constructor(...args: any[]);
+    [key: string]: any;
+  }
   export type Transport = any;
 }
 
 declare module '@modelcontextprotocol/sdk/dist/esm/server/sse.js' {
-  export class SSEServerTransport {}
+  export class SSEServerTransport {
+    constructor(...args: any[]);
+    [key: string]: any;
+  }
 }
 
 declare module '@modelcontextprotocol/sdk/dist/esm/types.js' {
