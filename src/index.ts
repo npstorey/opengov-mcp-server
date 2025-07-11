@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 
-/* ─── SDK imports (from ESM bundle, WITHOUT .js suffix) ──────────────── */
-import { Server } from '@modelcontextprotocol/sdk/dist/esm/server/index';
+/* ─── SDK imports (from ESM bundle, WITH .js suffix) ──────────────── */
+import { Server } from '@modelcontextprotocol/sdk/dist/esm/server/index.js';
 import {
   StreamableHTTPServerTransport,
   type Transport,
-} from '@modelcontextprotocol/sdk/dist/esm/server/streamableHttp';
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/dist/esm/server/sse';
+} from '@modelcontextprotocol/sdk/dist/esm/server/streamableHttp.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/dist/esm/server/sse.js';
 import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
-} from '@modelcontextprotocol/sdk/dist/esm/types';
+} from '@modelcontextprotocol/sdk/dist/esm/types.js';
 
 /* ─── Local + 3rd-party imports ─────────────────────────────────────── */
 import { currentTransport } from './mcp/transport/streamableHttp.js';
