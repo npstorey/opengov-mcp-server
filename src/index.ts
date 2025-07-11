@@ -13,7 +13,6 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 /* ─── Local + 3rd-party imports ──────────────────────────────────── */
-import { currentTransport } from './mcp/transport/streamableHttp.js';
 import {
   UNIFIED_SOCRATA_TOOL,
   socrataToolZodSchema,
@@ -75,18 +74,15 @@ async function createLowLevelServerInstance(): Promise<Server> {
 /* ─── Server bootstrap ───────────────────────────────────────────── */
 async function startApp() {
   /*
-   * Create the Express app, add JSON body-parser (needed so POST /mcp
-   * supplies req.body), then CORS, and finally declare the common paths.
+   * Create the Express app. The MCP transport handles its own request
+   * parsing, so we must NOT use express.json() before the /mcp route.
    */
   const app = express();
 
-  /* Parse JSON for every route (1 MB limit is plenty for JSON-RPC) */
-  app.use(express.json({ limit: '1mb' }));
-
-  /* CORS must come after body-parser but before any route definitions */
+  /* CORS comes first */
   app.use(
     cors({
-      origin: true,                     // reflect caller’s Origin
+      origin: true,                     // reflect caller's Origin
       credentials: true,                // allow cookies / auth headers
       exposedHeaders: ['mcp-session-id'] // let client read this header
     }),
@@ -105,8 +101,9 @@ async function startApp() {
   app.get('/healthz', (_, res) => res.sendStatus(200));
 
   /* main transport & server */
-  const mainTransportInstance =
-    currentTransport as StreamableHTTPServerTransport;
+  const mainTransportInstance = new StreamableHTTPServerTransport({
+    sessionIdGenerator: () => Math.random().toString(36).slice(2)
+  });
 
   /* enable helper so the first POST auto-creates a session */
   (mainTransportInstance as any).autoCreateSession = true;
@@ -134,7 +131,7 @@ async function startApp() {
     next();
   });
 
-  /* /mcp route */
+  /* /mcp route - CRITICAL: No body parsing middleware before this! */
   app.all(mcpPath, (req: Request, res: Response) => {
     console.log('[Express /mcp] incoming', req.method, req.headers['mcp-session-id']);
     (mainTransportInstance as any)
@@ -147,7 +144,7 @@ async function startApp() {
 
   /* legacy SSE */
   const sseTransports: Record<string, SSEServerTransport> = {};
-  app.all(ssePath, (req: Request, res: Response) => {
+  app.all(ssePath, express.json(), (req: Request, res: Response) => {
     if (req.method === 'GET') {
       const t = new SSEServerTransport(ssePath, res as ServerResponse);
       sseTransports[t.sessionId] = t;
