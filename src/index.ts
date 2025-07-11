@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { ListToolsRequestSchema, CallToolRequestSchema, InitializeRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
@@ -45,7 +46,7 @@ async function createLowLevelServerInstance(): Promise<Server> {
   });
 
   // --- Handle Initialize --- 
-  baseServer.setRequestHandler({ method: 'initialize' } as any, async (request: any) => {
+  baseServer.setRequestHandler(InitializeRequestSchema, async (request: any) => {
     console.log('[Server - Initialize] Received initialize request:', JSON.stringify(request, null, 2));
     
     return {
