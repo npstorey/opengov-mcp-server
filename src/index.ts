@@ -122,6 +122,7 @@ async function startApp() {
 
   /* /mcp route */
   app.all(mcpPath, (req: Request, res: Response) => {
+    console.log('[Express /mcp] incoming', req.method, req.headers['mcp-session-id']);
     (mainTransportInstance as any)
       .handleRequest(req as IncomingMessage, res as ServerResponse)
       .catch((e: Error) => {
