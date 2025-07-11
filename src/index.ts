@@ -4,6 +4,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'; // Low-level server
 import { currentTransport, type Transport } from './mcp/transport/streamableHttp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { setLogLevel } from '@modelcontextprotocol/sdk';
 import express from 'express';
 import type { Request, Response } from 'express';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -194,6 +195,7 @@ async function startApp() {
     // --- Create Single Transport Instance (remains the same) --- 
     console.log('[MCP Setup] Creating main transport instance...');
     mainTransportInstance = currentTransport;
+    setLogLevel('debug');            // verbose SDK logs
     if ('onsessioninitialized' in (mainTransportInstance as any)) {
       (mainTransportInstance as any).onsessioninitialized = (sessionId: string) => {
         console.log('[MCP Transport] Session initialized:', sessionId);
@@ -218,7 +220,7 @@ async function startApp() {
     console.log('[MCP Setup] Connecting single Server (low-level) to main transport...');
     // await singleMcpServer.connect(mainTransportInstance); // Will be replaced
     await lowLevelServer.connect(mainTransportInstance as any);
-    console.log('[MCP Setup] Single Server (low-level) connected to main transport.');
+    console.log('[MCP Setup] Server connected ✅');
     
     (mainTransportInstance as any).onerror = (error: Error) => {
         console.error('[MCP Transport - onerror] Transport-level error:', error);
