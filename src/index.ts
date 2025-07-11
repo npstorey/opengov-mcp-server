@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { createSimpleHTTPServerTransport } from '@modelcontextprotocol/sdk';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import express from 'express';
 import dotenv from 'dotenv';
@@ -112,7 +112,7 @@ async function createLowLevelServerInstance(): Promise<Server> {
 }
 
 async function startApp() {
-  let mainTransportInstance: any = undefined;
+  let mainTransportInstance: StreamableHTTPServerTransport | undefined = undefined;
   let lowLevelServer: Server | undefined = undefined;
   const sseTransports: Record<string, SSEServerTransport> = {};
 
@@ -142,7 +142,9 @@ async function startApp() {
     
     // Create transport instance
     console.log('[MCP Setup] Creating main transport instance...');
-    mainTransportInstance = createSimpleHTTPServerTransport();
+    mainTransportInstance = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => Math.random().toString(36).slice(2)
+    });
     
     if ('onsessioninitialized' in mainTransportInstance) {
       mainTransportInstance.onsessioninitialized = (sessionId: string) => {
@@ -248,7 +250,7 @@ async function startApp() {
       
       if (mainTransportInstance) {
         console.log('Closing main transport...');
-        await mainTransportInstance.stop().catch((e: any) => console.error('Error closing main transport:', e));
+        await mainTransportInstance.close().catch((e: any) => console.error('Error closing main transport:', e));
       }
       
       httpServer.close(() => {
@@ -263,7 +265,7 @@ async function startApp() {
     console.error('Fatal error during application startup:', err);
     
     if (mainTransportInstance) {
-      await mainTransportInstance.stop().catch((e: any) => console.error('Error closing main transport during fatal startup error:', e));
+      await mainTransportInstance.close().catch((e: any) => console.error('Error closing main transport during fatal startup error:', e));
     }
     
     process.exit(1);
