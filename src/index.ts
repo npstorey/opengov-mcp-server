@@ -170,13 +170,28 @@ async function startApp() {
 
     // --- Create Single Transport Instance (remains the same) --- 
     console.log('[MCP Setup] Creating main transport instance...');
-    mainTransportInstance = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => {
-        const sessionId = 'session-' + Math.random().toString(36).slice(2);
-        console.log('[Transport] Generated session ID:', sessionId);
-        return sessionId;
+    try {
+      mainTransportInstance = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => {
+          const sessionId = 'session-' + Math.random().toString(36).slice(2);
+          console.log('[Transport] Generated session ID:', sessionId);
+          return sessionId;
+        }
+      } as any);
+      
+      console.log('[MCP Setup] Transport created successfully');
+      console.log('[MCP Setup] Transport type:', typeof mainTransportInstance);
+      console.log('[MCP Setup] Transport handleRequest exists:', typeof mainTransportInstance?.handleRequest);
+      
+      if ('onsessioninitialized' in mainTransportInstance) {
+        mainTransportInstance.onsessioninitialized = (sessionId: string) => {
+          console.log('[MCP Transport] Session initialized:', sessionId);
+        };
       }
-    } as any);
+    } catch (err) {
+      console.error('[MCP Setup] Error creating transport:', err);
+      throw err;
+    }
     if ('onsessioninitialized' in mainTransportInstance) {
       mainTransportInstance.onsessioninitialized = (sessionId) => {
         console.log('[MCP Transport] Session initialized:', sessionId);
@@ -222,25 +237,52 @@ async function startApp() {
       next();
     });
 
-    app.all(mcpPath, (req, res) => {
+    app.all(mcpPath, async (req, res) => {
       // Earliest log for any /mcp request
       console.log(`[Express /mcp ENTRY] Method: ${req.method}, URL: ${req.originalUrl}, Origin: ${req.headers.origin}`);
       console.log(`[Express /mcp ${req.method}] route hit. Headers:`, JSON.stringify(req.headers, null, 2));
       
-      if (req.method === 'POST' && req.body) {
-        console.log('[Express /mcp POST] Parsed req.body (if any body-parser ran):', JSON.stringify(req.body, null, 2));
+      // Log body for POST requests
+      if (req.method === 'POST') {
+        // Read the raw body since we're not using express.json()
+        let body = '';
+        req.on('data', chunk => {
+          body += chunk.toString();
+        });
+        req.on('end', () => {
+          console.log('[Express /mcp POST] Raw body:', body);
+        });
       }
-
-      if (!mainTransportInstance) { // Keep this safety check
-        console.error('[Express Route /mcp] Main transport not initialized! This should not happen.');
+    
+      if (!mainTransportInstance) {
+        console.error('[Express Route /mcp] Main transport not initialized!');
         if (!res.headersSent) res.status(503).send('MCP Service Unavailable');
         return;
       }
-
-      mainTransportInstance.handleRequest(req, res).catch(err => {
-        console.error('[transport]', err);
-        if (!res.headersSent) res.status(500).end();
-      });
+    
+      try {
+        console.log('[Express /mcp] About to call handleRequest...');
+        console.log('[Express /mcp] Transport instance:', typeof mainTransportInstance);
+        console.log('[Express /mcp] handleRequest method exists:', typeof mainTransportInstance.handleRequest);
+        
+        // Call handleRequest
+        const result = await mainTransportInstance.handleRequest(req, res);
+        
+        console.log('[Express /mcp] handleRequest returned:', result);
+        console.log('[Express /mcp] Response headers sent:', res.headersSent);
+      } catch (err: any) {
+        console.error('[Express /mcp] Error in handleRequest:', err);
+        console.error('[Express /mcp] Error name:', err?.name);
+        console.error('[Express /mcp] Error message:', err?.message);
+        console.error('[Express /mcp] Error stack:', err?.stack);
+        
+        if (!res.headersSent) {
+          res.status(500).json({ 
+            error: err?.message || 'Internal server error',
+            details: process.env.NODE_ENV === 'development' ? err?.stack : undefined
+          });
+        }
+      }
     });
 
     // Legacy SSE transport endpoint
