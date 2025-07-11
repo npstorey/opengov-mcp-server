@@ -3,6 +3,7 @@
 // import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'; // Will be replaced
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'; // Low-level server
 import { currentTransport, type Transport } from './mcp/transport/streamableHttp.js';
+import { createSimpleHTTPServerTransport } from '@modelcontextprotocol/sdk';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import express from 'express';
 import type { Request, Response } from 'express';
@@ -193,7 +194,7 @@ async function startApp() {
 
     // --- Create Single Transport Instance (remains the same) --- 
     console.log('[MCP Setup] Creating main transport instance...');
-    mainTransportInstance = currentTransport;
+    const mainTransportInstance = createSimpleHTTPServerTransport();
     if ('onsessioninitialized' in (mainTransportInstance as any)) {
       (mainTransportInstance as any).onsessioninitialized = (sessionId: string) => {
         console.log('[MCP Transport] Session initialized:', sessionId);
