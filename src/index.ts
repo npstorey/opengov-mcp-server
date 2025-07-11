@@ -147,11 +147,7 @@ async function startApp() {
             jsonrpc: '2.0',
             id: body.id,
             result: {
-              tools: [{
-                name: toolName,
-                description: toolDescription,
-                inputSchema: toolParameters
-              }]
+              tools: []  // Empty tools array for testing
             }
           };
           
