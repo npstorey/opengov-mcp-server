@@ -72,20 +72,35 @@ async function createLowLevelServerInstance(): Promise<Server> {
   return baseServer;
 }
 
-/* ─── Server bootstrap ──────────────────────────────────────────── */
+/* ─── Server bootstrap ─────────────────────────────────────────────── */
 async function startApp() {
+  /*
+   * NOTE:
+   *  • We create the Express instance.
+   *  • We add a permissive CORS layer *before* defining any routes.
+   *  • We declare the commonly-used constants (mcpPath, ssePath, port) up-front,
+   *    so every later reference is using exactly the same string.
+   */
   const app = express();
+
   app.use(
     cors({
-      origin: true,
-      credentials: true,
-      exposedHeaders: ['mcp-session-id'],
-    }),
+      origin: true,                    // reflect the caller’s Origin
+      credentials: true,               // allow cookies / auth headers
+      exposedHeaders: ['mcp-session-id'] // lets the client read this header
+    })
   );
 
-  const mcpPath = '/mcp';
-  const ssePath = '/mcp-sse';
-  const port = Number(process.env.PORT) || 8000;
+  // ── Constants (keep these centralised) ────────────────────────────
+  const mcpPath = '/mcp';      // JSON-RPC 2.0 over HTTP or SSE fallback
+  const ssePath = '/mcp-sse';  // legacy Server-Sent Events endpoint
+  const port    = Number(process.env.PORT) || 10_000; // Render binds 0.0.0.0
+
+  /* QUICK sanity-check in logs so we always know which build is running */
+  console.log(
+    `[Bootstrap] starting OpenGov MCP @ :${port}  (paths: ${mcpPath}, ${ssePath})`
+  );
+
 
   /* health */
   app.get('/healthz', (_, res) => res.sendStatus(200));
