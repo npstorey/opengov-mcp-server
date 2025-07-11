@@ -338,6 +338,7 @@ export const UNIFIED_SOCRATA_TOOL: Tool = {
   name: 'get_data',
   description: 'A unified tool to interact with Socrata open-data portals.',
   parameters: jsonParameters,
+  inputSchema: jsonParameters, // Add this line
   // Assert the handler type to satisfy the generic Tool.handler signature.
   // The actual call from src/index.ts will provide the correctly typed SocrataToolParams.
   handler: handleSocrataTool as (params: Record<string, unknown>) => Promise<unknown>
