@@ -13,7 +13,10 @@ import {
 // import { McpToolHandlerContext } from '@modelcontextprotocol/sdk/types.js'; // Removed incorrect import
 
 // Get the default domain from environment
-const getDefaultDomain = () => process.env.DATA_PORTAL_URL?.replace(/^https?:\/\//, '');
+const getDefaultDomain = () => {
+  const url = process.env.DATA_PORTAL_URL || 'https://data.cityofnewyork.us';
+  return url.replace(/^https?:\/\//, '');
+};
 
 // Handler for catalog functionality
 async function handleCatalog(params: {
