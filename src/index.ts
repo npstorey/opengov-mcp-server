@@ -1,184 +1,150 @@
 #!/usr/bin/env node
 
-/* ─── SDK imports (from ESM bundle, WITH .js suffix) ─────────────── */
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import {
-  StreamableHTTPServerTransport,
-  type Transport,
-} from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
-import {
-  ListToolsRequestSchema,
-  CallToolRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
-
-/* ─── Local + 3rd-party imports ──────────────────────────────────── */
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import express from 'express';
+import dotenv from 'dotenv';
 import {
   UNIFIED_SOCRATA_TOOL,
   socrataToolZodSchema,
-  type SocrataToolParams,
 } from './tools/socrata-tools.js';
-import express, { type Request, type Response } from 'express';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import crypto from 'crypto';
-import { z } from 'zod';
 
 dotenv.config();
 
-/* ─── Helper to build the low-level MCP server ───────────────────── */
-async function createLowLevelServerInstance(): Promise<Server> {
-  const baseServer = new Server(
-    { name: 'opengov-mcp-server', version: '0.1.1' },
-    {
-      capabilities: {
-        tools: {},
-        prompts: {},
-        roots: { listChanged: true },
-        sampling: {},
-      },
-      authMethods: [],
-    },
-  );
-
-  /* listTools */
-  baseServer.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [
-      {
-        name: UNIFIED_SOCRATA_TOOL.name,
-        description: UNIFIED_SOCRATA_TOOL.description,
-        parameters: UNIFIED_SOCRATA_TOOL.parameters,
-      },
-    ],
-  }));
-
-  /* callTool */
-  baseServer.setRequestHandler(CallToolRequestSchema, async (req) => {
-    const { name, arguments: args } = req.params ?? {};
-    if (name !== UNIFIED_SOCRATA_TOOL.name)
-      throw new Error(`Method not found: ${name}`);
-
-    const parsed = socrataToolZodSchema.parse(args);
-    const result = await UNIFIED_SOCRATA_TOOL.handler!(parsed);
-
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-      isError: false,
-    };
-  });
-
-  return baseServer;
-}
-
-/* ─── Server bootstrap ───────────────────────────────────────────── */
-async function startApp() {
-  /*
-   * Create the Express app. The MCP transport handles its own request
-   * parsing, so we must NOT use express.json() before the /mcp route.
-   */
+async function main() {
   const app = express();
-
-  /* CORS comes first */
-  app.use(
-    cors({
-      origin: true,                     // reflect caller's Origin
-      credentials: true,                // allow cookies / auth headers
-      exposedHeaders: ['mcp-session-id'] // let client read this header
-    }),
-  );
-
-  // ── Constants (keep these centralised) ──────────────────────────
-  const mcpPath = '/mcp';     // JSON-RPC over HTTP + SSE fallback
-  const ssePath = '/mcp-sse'; // legacy SSE endpoint (optional)
-  const port    = Number(process.env.PORT) || 8000;
-
-  console.log(
-    `[Bootstrap] OpenGov MCP starting on :${port}  (paths: ${mcpPath}, ${ssePath})`
-  );
-
-  /* health */
+  const port = Number(process.env.PORT) || 8000;
+  
+  // Basic endpoints
   app.get('/healthz', (_, res) => res.sendStatus(200));
-
-  /* main transport & server */
-  const mainTransportInstance = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => Math.random().toString(36).slice(2)
-  });
-
-  /* enable helper so the first POST auto-creates a session */
-  (mainTransportInstance as any).autoCreateSession = true;
-  console.log(
-    '[MCP] autoCreateSession ENABLED ▶',
-    !!(mainTransportInstance as any).autoCreateSession,
+  app.get('/', (_, res) => res.send('MCP Server Running'));
+  
+  // Create MCP server
+  const server = new McpServer(
+    { name: 'opengov-mcp-server', version: '0.1.1' },
+    { capabilities: { tools: {} } }
   );
-
-  /* verbose transport logging (dev only) */
-  (mainTransportInstance as any).onmessage = (m: any, extra?: any) =>
-    console.log('[Transport] →', JSON.stringify(m), extra ?? '');
-  (mainTransportInstance as any).onerror = (e: any) =>
-    console.error('[Transport] ERROR', e);
-
-  const server = await createLowLevelServerInstance();
-  await server.connect(mainTransportInstance as any);
-  console.log('[MCP] server connected ✅');
-
-  /* accept-header shim */
-  app.use(mcpPath, (req, _res, next) => {
-    const h = req.headers.accept ?? '';
-    if (!h.includes('text/event-stream')) {
-      req.headers.accept = h ? `${h}, text/event-stream` : 'text/event-stream';
+  
+  // Register tool
+  server.tool(
+    UNIFIED_SOCRATA_TOOL.name,
+    UNIFIED_SOCRATA_TOOL.description,
+    UNIFIED_SOCRATA_TOOL.parameters,
+    async (params) => {
+      const parsed = socrataToolZodSchema.parse(params);
+      const result = await UNIFIED_SOCRATA_TOOL.handler!(parsed);
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }]
+      };
     }
-    next();
-  });
-
-  /* /mcp route - CRITICAL: No body parsing middleware before this! */
-  app.all(mcpPath, (req: Request, res: Response) => {
-    console.log('[Express /mcp] incoming', req.method, req.headers['mcp-session-id']);
-    (mainTransportInstance as any)
-      .handleRequest(req as IncomingMessage, res as ServerResponse)
-      .catch((e: Error) => {
-        console.error('[transport]', e);
-        if (!res.headersSent) res.status(500).end();
+  );
+  
+  // Simple HTTP transport handler
+  const sessions = new Map<string, any>();
+  
+  app.post('/mcp', express.text({ type: '*/*' }), async (req, res) => {
+    try {
+      const sessionId = req.headers['mcp-session-id'] as string || 
+                       'session-' + Date.now();
+      
+      console.log(`[MCP] Request: ${req.method} Session: ${sessionId}`);
+      console.log(`[MCP] Body:`, req.body);
+      
+      // Parse JSON-RPC request
+      const request = JSON.parse(req.body);
+      
+      // Handle initialize specially
+      if (request.method === 'initialize') {
+        const response = {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            protocolVersion: '0.1.0',
+            capabilities: {
+              tools: {}
+            },
+            serverInfo: {
+              name: 'opengov-mcp-server',
+              version: '0.1.1'
+            }
+          }
+        };
+        
+        res.setHeader('mcp-session-id', sessionId);
+        res.json(response);
+        sessions.set(sessionId, { initialized: true });
+        return;
+      }
+      
+      // For other requests, check session
+      if (!sessions.has(sessionId)) {
+        res.status(400).json({
+          jsonrpc: '2.0',
+          id: request.id,
+          error: { code: -32000, message: 'Server not initialized' }
+        });
+        return;
+      }
+      
+      // Delegate to MCP server
+      // This is a simplified approach - in production you'd properly integrate
+      // with the MCP server's request handling
+      
+      if (request.method === 'tools/list') {
+        res.json({
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            tools: [{
+              name: UNIFIED_SOCRATA_TOOL.name,
+              description: UNIFIED_SOCRATA_TOOL.description,
+              inputSchema: UNIFIED_SOCRATA_TOOL.parameters
+            }]
+          }
+        });
+      } else if (request.method === 'tools/call') {
+        try {
+          const parsed = socrataToolZodSchema.parse(request.params.arguments);
+          const result = await UNIFIED_SOCRATA_TOOL.handler!(parsed);
+          res.json({
+            jsonrpc: '2.0',
+            id: request.id,
+            result: {
+              content: [{ type: 'text', text: JSON.stringify(result, null, 2) }]
+            }
+          });
+        } catch (error) {
+          res.json({
+            jsonrpc: '2.0',
+            id: request.id,
+            error: { 
+              code: -32602, 
+              message: error instanceof Error ? error.message : 'Invalid params' 
+            }
+          });
+        }
+      } else {
+        res.json({
+          jsonrpc: '2.0',
+          id: request.id,
+          error: { code: -32601, message: 'Method not found' }
+        });
+      }
+      
+    } catch (error) {
+      console.error('[MCP] Error:', error);
+      res.status(500).json({
+        jsonrpc: '2.0',
+        error: { 
+          code: -32603, 
+          message: error instanceof Error ? error.message : 'Internal error' 
+        }
       });
-  });
-
-  /* legacy SSE */
-  const sseTransports: Record<string, SSEServerTransport> = {};
-  app.all(ssePath, express.json(), (req: Request, res: Response) => {
-    if (req.method === 'GET') {
-      const t = new SSEServerTransport(ssePath, res as ServerResponse);
-      sseTransports[t.sessionId] = t;
-      t.onclose = () => delete sseTransports[t.sessionId];
-      server.connect(t as any).catch(console.error);
-    } else if (req.method === 'POST') {
-      const t = sseTransports[req.query.sessionId as string];
-      if (!t) return res.status(400).send('No transport for sessionId');
-      (t as any)
-        .handlePostMessage(req as any, res as ServerResponse, req.body)
-        .catch(console.error);
-    } else {
-      res.status(405).end();
     }
   });
-
-  /* root */
-  app.get('/', (_, res) => res.send('OpenGov MCP Server running.'));
-
-  /* start HTTP */
-  const httpServer = app.listen(port, '0.0.0.0', () =>
-    console.log(`🚀 listening on ${port} (MCP @ ${mcpPath})`),
-  );
-
-  /* graceful shutdown */
-  const shutdown = () => {
-    console.log('Shutting down…');
-    httpServer.close(() => process.exit(0));
-  };
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  
+  app.listen(port, () => {
+    console.log(`🚀 Server running on port ${port}`);
+  });
 }
 
-startApp().catch((e) => {
-  console.error('[Fatal]', e);
-  process.exit(1);
-});
+main().catch(console.error);
