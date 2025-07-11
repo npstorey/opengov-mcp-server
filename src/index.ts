@@ -3,7 +3,7 @@
 // import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'; // Will be replaced
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'; // Low-level server
 import { currentTransport, type Transport } from './mcp/transport/streamableHttp.js';
-import { createSimpleHTTPServerTransport } from '@modelcontextprotocol/sdk';
+// import { createSimpleHTTPServerTransport } from '@modelcontextprotocol/sdk';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import express from 'express';
 import type { Request, Response } from 'express';
@@ -325,7 +325,7 @@ async function startApp() {
       }
       if (mainTransportInstance) {
         console.log('Closing main transport...');
-        await mainTransportInstance.stop().catch(e => console.error('Error closing main transport:', e));
+//        await mainTransportInstance.stop().catch(e => console.error('Error closing main transport:', e));
       }
       httpServer.close(() => {
         console.log('HTTP server closed.');
