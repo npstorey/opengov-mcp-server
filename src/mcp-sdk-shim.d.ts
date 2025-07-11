@@ -20,10 +20,6 @@ declare module '@modelcontextprotocol/sdk/server/mcp.js' {
   }
 }
 
-declare module '@modelcontextprotocol/sdk' {
-  export function createSimpleHTTPServerTransport(): any;
-}
-
 declare module '@modelcontextprotocol/sdk/server/streamableHttp.js' {
   export class StreamableHTTPServerTransport {
     constructor(...a: any[]);
