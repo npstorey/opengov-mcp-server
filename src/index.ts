@@ -79,8 +79,20 @@ async function startApp() {
     }
   );
 
-  // Manual MCP protocol handler
-  const sessions = new Map<string, any>();
+  // Session management with SSE connections
+  interface Session {
+    initialized: boolean;
+    protocolVersion: string;
+    sseResponse?: express.Response;
+  }
+  
+  const sessions = new Map<string, Session>();
+
+  // Helper function to send SSE message
+  function sendSSE(res: express.Response, data: any) {
+    const message = `data: ${JSON.stringify(data)}\n\n`;
+    res.write(message);
+  }
 
   app.post('/mcp', express.text({ type: '*/*' }), async (req, res) => {
     console.log('[MCP] POST request, headers:', {
@@ -143,16 +155,32 @@ async function startApp() {
             return;
           }
           
+          const session = sessions.get(sessionId)!;
           const toolsResponse = {
             jsonrpc: '2.0',
             id: body.id,
             result: {
-              tools: []  // Empty tools array for testing
+              tools: [{
+                name: toolName,
+                description: toolDescription,
+                inputSchema: toolParameters
+              }]
             }
           };
           
           console.log('[MCP] Sending tools list response:', JSON.stringify(toolsResponse, null, 2));
-          res.json(toolsResponse);
+          
+          // If SSE connection exists, send through SSE
+          if (session.sseResponse) {
+            console.log('[MCP] Sending response through SSE');
+            sendSSE(session.sseResponse, toolsResponse);
+            // Send empty 204 response to the POST request
+            res.status(204).end();
+          } else {
+            // Otherwise send as regular response
+            console.log('[MCP] Sending response through HTTP');
+            res.json(toolsResponse);
+          }
           console.log('[MCP] Sent tools list');
           break;
 
@@ -167,6 +195,8 @@ async function startApp() {
             return;
           }
           
+          const callSession = sessions.get(sessionId)!;
+          
           try {
             const parsed = socrataToolZodSchema.parse(body.params.arguments);
             const handler = UNIFIED_SOCRATA_TOOL.handler;
@@ -174,24 +204,41 @@ async function startApp() {
               throw new Error('Tool handler is not a function');
             }
             const result = await handler(parsed);
-            res.json({
+            
+            const callResponse = {
               jsonrpc: '2.0',
               id: body.id,
               result: {
                 content: [{ type: 'text', text: JSON.stringify(result, null, 2) }]
               }
-            });
+            };
+            
+            // If SSE connection exists, send through SSE
+            if (callSession.sseResponse) {
+              console.log('[MCP] Sending tool response through SSE');
+              sendSSE(callSession.sseResponse, callResponse);
+              res.status(204).end();
+            } else {
+              res.json(callResponse);
+            }
             console.log('[MCP] Tool executed successfully');
           } catch (error) {
             console.error('[MCP] Tool error:', error);
-            res.json({
+            const errorResponse = {
               jsonrpc: '2.0',
               id: body.id,
               error: { 
                 code: -32602, 
                 message: error instanceof Error ? error.message : 'Invalid params' 
               }
-            });
+            };
+            
+            if (callSession.sseResponse) {
+              sendSSE(callSession.sseResponse, errorResponse);
+              res.status(204).end();
+            } else {
+              res.json(errorResponse);
+            }
           }
           break;
 
@@ -203,11 +250,19 @@ async function startApp() {
             res.status(204).end();
           } else {
             console.log('[MCP] Unknown method:', body.method);
-            res.json({
+            const errorResponse = {
               jsonrpc: '2.0',
               id: body.id,
               error: { code: -32601, message: 'Method not found' }
-            });
+            };
+            
+            const unknownSession = sessionId ? sessions.get(sessionId) : null;
+            if (unknownSession?.sseResponse) {
+              sendSSE(unknownSession.sseResponse, errorResponse);
+              res.status(204).end();
+            } else {
+              res.json(errorResponse);
+            }
           }
       }
     } catch (error) {
@@ -239,12 +294,17 @@ async function startApp() {
       return;
     }
 
+    const session = sessions.get(sessionId)!;
+
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no' // Disable nginx buffering
     });
+
+    // Store the SSE response in the session
+    session.sseResponse = res;
 
     console.log('[MCP] SSE connection established for session:', sessionId);
 
@@ -259,7 +319,11 @@ async function startApp() {
     req.on('close', () => {
       clearInterval(keepalive);
       console.log('[MCP] SSE connection closed for session:', sessionId);
-      sessions.delete(sessionId);
+      // Remove SSE response from session but keep the session
+      if (sessions.has(sessionId)) {
+        const session = sessions.get(sessionId)!;
+        delete session.sseResponse;
+      }
     });
   });
 
