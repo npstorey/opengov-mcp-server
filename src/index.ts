@@ -4,7 +4,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'; // Low-level server
 import { currentTransport, type Transport } from './mcp/transport/streamableHttp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
-import { setLogLevel } from '@modelcontextprotocol/sdk';
+import { setLogLevel } from '@modelcontextprotocol/sdk/logging.js';
 import express from 'express';
 import type { Request, Response } from 'express';
 import type { IncomingMessage, ServerResponse } from 'node:http';
