@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-/* ─── SDK imports (from ESM bundle, WITH .js suffix) ──────────────── */
+/* ─── SDK imports (from ESM bundle, WITH .js suffix) ─────────────── */
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import {
   StreamableHTTPServerTransport,
@@ -12,7 +12,7 @@ import {
   CallToolRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 
-/* ─── Local + 3rd-party imports ─────────────────────────────────────── */
+/* ─── Local + 3rd-party imports ──────────────────────────────────── */
 import { currentTransport } from './mcp/transport/streamableHttp.js';
 import {
   UNIFIED_SOCRATA_TOOL,
@@ -28,7 +28,7 @@ import { z } from 'zod';
 
 dotenv.config();
 
-/* ─── Helper to build the low-level MCP server ──────────────────────── */
+/* ─── Helper to build the low-level MCP server ───────────────────── */
 async function createLowLevelServerInstance(): Promise<Server> {
   const baseServer = new Server(
     { name: 'opengov-mcp-server', version: '0.1.1' },
@@ -72,10 +72,16 @@ async function createLowLevelServerInstance(): Promise<Server> {
   return baseServer;
 }
 
-/* ─── Server bootstrap ─────────────────────────────────────────────── */
+/* ─── Server bootstrap ──────────────────────────────────────────── */
 async function startApp() {
   const app = express();
-  app.use(cors({ origin: true, credentials: true, exposedHeaders: ['mcp-session-id'] }));
+  app.use(
+    cors({
+      origin: true,
+      credentials: true,
+      exposedHeaders: ['mcp-session-id'],
+    }),
+  );
 
   const mcpPath = '/mcp';
   const ssePath = '/mcp-sse';
@@ -85,8 +91,22 @@ async function startApp() {
   app.get('/healthz', (_, res) => res.sendStatus(200));
 
   /* main transport & server */
-  const mainTransportInstance = currentTransport as StreamableHTTPServerTransport;
+  const mainTransportInstance =
+    currentTransport as StreamableHTTPServerTransport;
+
+  /* enable helper so the first POST auto-creates a session */
   (mainTransportInstance as any).autoCreateSession = true;
+  console.log(
+    '[MCP] autoCreateSession ENABLED ▶',
+    !!(mainTransportInstance as any).autoCreateSession,
+  );
+
+  /* verbose transport logging (dev only) */
+  (mainTransportInstance as any).onmessage = (m: any, extra?: any) =>
+    console.log('[Transport] →', JSON.stringify(m), extra ?? '');
+  (mainTransportInstance as any).onerror = (e: any) =>
+    console.error('[Transport] ERROR', e);
+
   const server = await createLowLevelServerInstance();
   await server.connect(mainTransportInstance as any);
   console.log('[MCP] server connected ✅');
