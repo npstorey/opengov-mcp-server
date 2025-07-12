@@ -52,13 +52,18 @@ async function createServer(): Promise<Server> {
   try {
     const InitializeRequestSchema = z.object({
       method: z.literal('initialize'),
-      params: z.any()
+      params: z.object({
+        protocolVersion: z.string(),
+        capabilities: z.any().optional(),
+        clientInfo: z.any().optional()
+      })
     });
     
     server.setRequestHandler(InitializeRequestSchema, async (request) => {
-      console.log('[Server - Initialize] Request received');
+      console.log('[Server - Initialize] Request received:', JSON.stringify(request, null, 2));
+      const protocolVersion = request.params.protocolVersion || '2025-01-01';
       return {
-        protocolVersion: '2025-01-01',
+        protocolVersion: protocolVersion,
         capabilities: {
           tools: {}
         },
@@ -208,6 +213,10 @@ async function startApp() {
         return sessionId;
       }
     });
+    
+    console.log('[MCP] Transport created, checking properties...');
+    console.log('[MCP] Transport prototype:', Object.getOwnPropertyNames(Object.getPrototypeOf(transport)));
+    console.log('[MCP] Transport instance properties:', Object.getOwnPropertyNames(transport));
 
     // Log transport events if available
     if ('onsessioninitialized' in transport) {
@@ -239,6 +248,14 @@ async function startApp() {
       console.log('[Transport.handleRequest] Called');
       console.log('[Transport.handleRequest] Method:', req.method);
       console.log('[Transport.handleRequest] URL:', req.url);
+      console.log('[Transport.handleRequest] Transport internal state:', {
+        hasServer: !!(transport as any)._server,
+        hasSession: !!(transport as any)._session,
+        serverInfo: (transport as any)._server ? {
+          name: (transport as any)._server.name,
+          connected: true
+        } : null
+      });
       
       try {
         const result = await originalHandleRequest(req, res);
@@ -249,6 +266,19 @@ async function startApp() {
         throw error;
       }
     };
+    
+    // Check if transport needs to be started
+    if ('start' in transport && typeof transport.start === 'function') {
+      console.log('[MCP] Starting transport...');
+      try {
+        await transport.start();
+        console.log('[MCP] Transport started');
+      } catch (error) {
+        console.error('[MCP] Error starting transport:', error);
+      }
+    } else {
+      console.log('[MCP] Transport does not have a start method');
+    }
 
     // Create server
     server = await createServer();
@@ -313,6 +343,16 @@ async function startApp() {
         req.on('end', () => {
           if (body) {
             console.log('[Express] Request body:', body);
+            
+            // Check if this is an initialize request without a session ID
+            try {
+              const parsed = JSON.parse(body);
+              if (parsed.method === 'initialize' && !req.headers['mcp-session-id']) {
+                console.log('[Express] Initialize request without session ID detected - this is expected for first request');
+              }
+            } catch (e) {
+              // Ignore parse errors
+            }
           }
         });
       }
@@ -327,10 +367,25 @@ async function startApp() {
       const originalEnd = res.end;
       const originalWrite = res.write;
       const originalSetHeader = res.setHeader;
+      const originalJson = res.json;
       
       res.setHeader = function(name: string, value: any) {
         console.log(`[Express] Response.setHeader: ${name} = ${value}`);
         return originalSetHeader.call(this, name, value);
+      };
+      
+      res.json = function(data: any) {
+        console.log('[Express] Response.json:', JSON.stringify(data, null, 2));
+        
+        // If this is an initialize response, ensure we're sending the session ID
+        if (data && data.result && !data.error) {
+          const sessionId = res.getHeader('mcp-session-id');
+          if (sessionId) {
+            console.log('[Express] Initialize response includes session ID in header:', sessionId);
+          }
+        }
+        
+        return originalJson.call(this, data);
       };
       
       res.write = function(chunk: any, encoding?: any, callback?: any) {
