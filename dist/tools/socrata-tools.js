@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { fetchFromSocrataApi } from '../utils/api.js';
+import { handleSearch } from './search.js';
 // import { McpToolHandlerContext } from '@modelcontextprotocol/sdk/types.js'; // Removed incorrect import
 // Get the default domain from environment
 const getDefaultDomain = () => {
@@ -95,7 +96,7 @@ async function handleColumnInfo(params) {
     const response = await fetchFromSocrataApi(`/api/views/${datasetId}/columns`, {}, baseUrl);
     return response;
 }
-// Handler for data access functionality
+// Handler for data access functionality (preserved for backward compatibility)
 async function handleDataAccess(params) {
     const { datasetId, domain = getDefaultDomain(), soqlQuery, limit = 10, offset = 0, select, where, order, group, having, q } = params;
     const apiParams = {};
@@ -138,7 +139,7 @@ export const socrataToolZodSchema = z.object({
         .describe('General search phrase OR a full SoQL query string. If this is a full SoQL query (e.g., starts with SELECT), other SoQL parameters like select, where, q might be overridden or ignored by the handler in favor of the full SoQL query. If it\'s a search phrase, it will likely be used for a full-text search ($q parameter to Socrata).'),
     // Optional parameters - these should also be in jsonParameters if they are to be exposed to the client
     domain: z.string().optional().describe('The Socrata domain (e.g., data.cityofnewyork.us)'),
-    limit: z.number().int().positive().optional().describe('Number of results to return'),
+    limit: z.union([z.number().int().positive(), z.literal('all')]).optional().describe('Number of results to return, or "all" to fetch all available data up to configured cap'),
     offset: z.number().int().nonnegative().optional().describe('Offset for pagination'),
     select: z.string().optional().describe('SoQL SELECT clause'),
     where: z.string().optional().describe('SoQL WHERE clause'),
@@ -169,8 +170,11 @@ const jsonParameters = {
             description: 'The Socrata domain (e.g., data.cityofnewyork.us)'
         },
         limit: {
-            type: 'integer',
-            description: 'Number of results to return'
+            oneOf: [
+                { type: 'integer', minimum: 1 },
+                { type: 'string', enum: ['all'] }
+            ],
+            description: 'Number of results to return, or "all" to fetch all available data up to configured cap'
         },
         offset: {
             type: 'integer',
@@ -246,10 +250,13 @@ export async function handleSocrataTool(params
     switch (type) {
         case 'catalog':
             // Pass all relevant params from modifiableParams
+            // Handle 'all' limit by converting to a large number for catalog
+            const catalogLimit = modifiableParams.limit === 'all' ? 1000 :
+                typeof modifiableParams.limit === 'number' ? modifiableParams.limit : 10;
             return handleCatalog({
                 query: modifiableParams.query,
                 domain: modifiableParams.domain,
-                limit: modifiableParams.limit,
+                limit: catalogLimit,
                 offset: modifiableParams.offset
             });
         case 'metadata':
@@ -291,7 +298,8 @@ export async function handleSocrataTool(params
                 passAsQ = queryField;
                 console.log('[handleSocrataTool] Treating "query" field as general search term mapped to $q parameter.');
             }
-            return handleDataAccess({
+            // Use the new search handler which includes metadata
+            return handleSearch({
                 datasetId: effectiveDatasetId,
                 domain: domainField,
                 soqlQuery: passAsSoqlQuery,

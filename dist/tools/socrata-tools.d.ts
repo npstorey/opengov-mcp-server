@@ -41,7 +41,7 @@ export declare const socrataToolZodSchema: z.ZodObject<{
     type: z.ZodEnum<["catalog", "metadata", "query", "metrics"]>;
     query: z.ZodOptional<z.ZodString>;
     domain: z.ZodOptional<z.ZodString>;
-    limit: z.ZodOptional<z.ZodNumber>;
+    limit: z.ZodOptional<z.ZodUnion<[z.ZodNumber, z.ZodLiteral<"all">]>>;
     offset: z.ZodOptional<z.ZodNumber>;
     select: z.ZodOptional<z.ZodString>;
     where: z.ZodOptional<z.ZodString>;
@@ -58,10 +58,10 @@ export declare const socrataToolZodSchema: z.ZodObject<{
     select?: string | undefined;
     group?: string | undefined;
     query?: string | undefined;
-    domain?: string | undefined;
-    limit?: number | undefined;
     datasetId?: string | undefined;
+    domain?: string | undefined;
     where?: string | undefined;
+    limit?: number | "all" | undefined;
     having?: string | undefined;
 }, {
     type: "metadata" | "query" | "catalog" | "metrics";
@@ -71,10 +71,10 @@ export declare const socrataToolZodSchema: z.ZodObject<{
     select?: string | undefined;
     group?: string | undefined;
     query?: string | undefined;
-    domain?: string | undefined;
-    limit?: number | undefined;
     datasetId?: string | undefined;
+    domain?: string | undefined;
     where?: string | undefined;
+    limit?: number | "all" | undefined;
     having?: string | undefined;
 }>;
 export type SocrataToolParams = z.infer<typeof socrataToolZodSchema>;
