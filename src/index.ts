@@ -167,9 +167,6 @@ async function startApp() {
     mainTransportInstance.handleRequest = async (req: any, res: any) => {
       console.log(`[Transport handleRequest] ${req.method} ${req.url}`);
       console.log('[Transport handleRequest] Headers:', req.headers);
-      if (req.body) {
-        console.log('[Transport handleRequest] Body:', req.body);
-      }
       try {
         const result = await originalHandleRequest(req, res);
         console.log('[Transport handleRequest] Request handled successfully');
@@ -211,9 +208,6 @@ async function startApp() {
       }
       next();
     });
-    
-    // Parse body as text for MCP endpoint
-    app.use(mcpPath, express.text({ type: '*/*' }));
     
     // Main MCP route - let the transport handle everything
     app.all(mcpPath, (req, res) => {
