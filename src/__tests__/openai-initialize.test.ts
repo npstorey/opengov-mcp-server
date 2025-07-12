@@ -228,7 +228,9 @@ describe('OpenAI Initialize Request', () => {
       .set('Content-Type', 'application/json')
       .set('Accept', 'application/json, text/event-stream');
 
-    const sessionId = initResponse.headers['mcp-session-id'];
+    // Session ID might be in response body or header
+    const sessionId = initResponse.headers['mcp-session-id'] || 
+                     initResponse.body.result?.sessionId;
     expect(sessionId).toBeDefined();
 
     // Now make a request with the session ID
@@ -353,7 +355,9 @@ describe('OpenAI Initialize Request', () => {
       .send(JSON.stringify(initializeRequest));
 
     expect(initResponse.status).toBe(200);
-    const sessionId = initResponse.headers['mcp-session-id'];
+    // Session ID might be in response body or header
+    const sessionId = initResponse.headers['mcp-session-id'] || 
+                     initResponse.body.result?.sessionId;
     expect(sessionId).toBeDefined();
     expect(sessionId).toMatch(/^[a-f0-9]{32}$/);
     

@@ -88,7 +88,7 @@ function enforceObjectSize(obj: any, maxKB: number): any {
  * Search for datasets and return only IDs with relevance scores
  */
 export async function searchIds(params: {
-  datasetId: string;
+  datasetId?: string;
   domain: string;
   query?: string;
   where?: string;
@@ -103,6 +103,14 @@ export async function searchIds(params: {
     limit = 100,
     offset = 0 
   } = params;
+
+  // Require datasetId for now - catalog search is handled in the parent handler
+  if (!datasetId) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'datasetId is required for searchIds function'
+    );
+  }
 
   // Pre-flight check: estimate response size
   // Each object is roughly {id: "string", score: number} ≈ 100 bytes average

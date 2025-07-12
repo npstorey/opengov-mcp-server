@@ -99,8 +99,8 @@ describe('Split Tools - Search and Document Retrieval', () => {
       });
 
       expect(result).toHaveLength(2);
-      expect(result[0]).toHaveProperty(':id', '123');
-      expect(result[1]).toHaveProperty(':id', '456');
+      expect(result[0]).toEqual(expect.objectContaining({ ':id': '123' }));
+      expect(result[1]).toEqual(expect.objectContaining({ ':id': '456' }));
     });
 
     it('should enforce maximum rows per request', async () => {

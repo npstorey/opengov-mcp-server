@@ -9,7 +9,7 @@ const SOCRATA_MAX_ROWS = 50000; // Socrata's per-request limit
 
 export interface DocumentRetrievalRequest {
   ids: string[];
-  datasetId: string;
+  datasetId?: string;
   domain: string;
 }
 
@@ -113,6 +113,13 @@ export async function retrieveDocuments(
   request: DocumentRetrievalRequest
 ): Promise<DocumentRetrievalResponse> {
   const { ids, datasetId, domain } = request;
+  
+  if (!datasetId) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'datasetId is required for document retrieval'
+    );
+  }
   
   // Pre-flight check: validate request size
   if (ids.length > MAX_ROWS_PER_REQUEST) {
@@ -247,7 +254,7 @@ export async function retrieveDocuments(
  * This is used when no specific IDs are provided
  */
 export async function retrieveAllDocuments(params: {
-  datasetId: string;
+  datasetId?: string;
   domain: string;
   limit?: number | 'all';
   offset?: number;
@@ -262,6 +269,13 @@ export async function retrieveAllDocuments(params: {
     where,
     order
   } = params;
+  
+  if (!datasetId) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      'datasetId is required for retrieveAllDocuments'
+    );
+  }
 
   // Check if we need to fetch all
   const fetchAll = limit === 'all';

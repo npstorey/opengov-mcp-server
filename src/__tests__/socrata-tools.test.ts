@@ -193,8 +193,8 @@ describe('Socrata Tools', () => {
       );
     });
 
-    it('should handle query parameter correctly', async () => {
-      await handleDataAccess({ datasetId: 'abc-123', query: 'SELECT * WHERE amount > 1000' });
+    it('should handle soqlQuery parameter correctly', async () => {
+      await handleDataAccess({ datasetId: 'abc-123', soqlQuery: 'SELECT * WHERE amount > 1000' });
       
       expect(mockedFetchFromSocrataApi).toHaveBeenCalledTimes(1);
       expect(mockedFetchFromSocrataApi).toHaveBeenCalledWith(
@@ -232,10 +232,10 @@ describe('Socrata Tools', () => {
       );
     });
 
-    it('should prioritize query over individual parameters', async () => {
+    it('should prioritize soqlQuery over individual parameters', async () => {
       await handleDataAccess({ 
         datasetId: 'abc-123', 
-        query: 'SELECT * WHERE amount > 1000',
+        soqlQuery: 'SELECT * WHERE amount > 1000',
         select: 'name, amount', 
         where: 'amount > 500'
       });
@@ -273,22 +273,19 @@ describe('Socrata Tools', () => {
     it('should route to the correct handler based on type', async () => {
       // Test each type of operation
       await handleSocrataTool({ type: 'catalog', query: 'budget' });
-      await handleSocrataTool({ type: 'categories' });
-      await handleSocrataTool({ type: 'tags' });
-      await handleSocrataTool({ type: 'dataset-metadata', datasetId: 'abc-123' });
-      await handleSocrataTool({ type: 'column-info', datasetId: 'abc-123' });
-      await handleSocrataTool({ type: 'data-access', datasetId: 'abc-123', limit: 20 });
-      await handleSocrataTool({ type: 'site-metrics' });
+      await handleSocrataTool({ type: 'metadata', query: 'abc-123' });
+      await handleSocrataTool({ type: 'query', datasetId: 'abc-123', limit: 20 });
+      await handleSocrataTool({ type: 'metrics' });
       
       // Verify that each call counts
-      expect(mockedFetchFromSocrataApi).toHaveBeenCalledTimes(7);
+      expect(mockedFetchFromSocrataApi).toHaveBeenCalledTimes(4);
     });
 
-    it('should map soqlQuery to query for data-access operations', async () => {
+    it('should map query to $query for query operations', async () => {
       await handleSocrataTool({ 
-        type: 'data-access', 
+        type: 'query', 
         datasetId: 'abc-123', 
-        soqlQuery: 'SELECT * WHERE amount > 1000' 
+        query: 'SELECT * WHERE amount > 1000' 
       });
       
       expect(mockedFetchFromSocrataApi).toHaveBeenCalledTimes(1);
@@ -302,19 +299,16 @@ describe('Socrata Tools', () => {
     });
 
     it('should throw an error for invalid operation type', async () => {
-      await expect(handleSocrataTool({ type: 'invalid' }))
-        .rejects.toThrow('Unknown operation type: invalid');
+      await expect(handleSocrataTool({ type: 'invalid' as any }))
+        .rejects.toThrow('Unknown Socrata operation type: invalid');
     });
 
     it('should throw an error when datasetId is missing for dataset operations', async () => {
-      await expect(handleSocrataTool({ type: 'dataset-metadata' }))
-        .rejects.toThrow('datasetId is required for dataset-metadata operation');
+      await expect(handleSocrataTool({ type: 'metadata' }))
+        .rejects.toThrow('Query (expected as datasetId) is required for type=metadata');
       
-      await expect(handleSocrataTool({ type: 'column-info' }))
-        .rejects.toThrow('datasetId is required for column-info operation');
-      
-      await expect(handleSocrataTool({ type: 'data-access' }))
-        .rejects.toThrow('datasetId is required for data-access operation');
+      await expect(handleSocrataTool({ type: 'query' }))
+        .rejects.toThrow('Dataset ID (from datasetId field, or from query field if not a SoQL SELECT) is required for type=query operation.');
     });
   });
 

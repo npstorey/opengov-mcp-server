@@ -77,6 +77,7 @@ describe('MCP Protocol Sequence', () => {
         jsonrpc: '2.0',
         method: 'initialize',
         params: {
+          protocolVersion: '2025-01-01',
           capabilities: {
             tools: {}
           }

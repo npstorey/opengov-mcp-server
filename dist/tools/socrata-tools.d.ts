@@ -40,38 +40,38 @@ declare function handleSiteMetrics(params: {
     domain?: string;
 }): Promise<PortalMetrics>;
 export declare const searchToolZodSchema: z.ZodObject<{
-    datasetId: z.ZodString;
+    datasetId: z.ZodOptional<z.ZodString>;
     domain: z.ZodOptional<z.ZodString>;
     query: z.ZodOptional<z.ZodString>;
     where: z.ZodOptional<z.ZodString>;
     limit: z.ZodOptional<z.ZodNumber>;
     offset: z.ZodOptional<z.ZodNumber>;
 }, "strip", z.ZodTypeAny, {
-    datasetId: string;
     offset?: number | undefined;
     query?: string | undefined;
+    datasetId?: string | undefined;
     domain?: string | undefined;
     where?: string | undefined;
     limit?: number | undefined;
 }, {
-    datasetId: string;
     offset?: number | undefined;
     query?: string | undefined;
+    datasetId?: string | undefined;
     domain?: string | undefined;
     where?: string | undefined;
     limit?: number | undefined;
 }>;
 export declare const documentRetrievalZodSchema: z.ZodObject<{
     ids: z.ZodArray<z.ZodString, "many">;
-    datasetId: z.ZodString;
+    datasetId: z.ZodOptional<z.ZodString>;
     domain: z.ZodOptional<z.ZodString>;
 }, "strip", z.ZodTypeAny, {
-    datasetId: string;
     ids: string[];
+    datasetId?: string | undefined;
     domain?: string | undefined;
 }, {
-    datasetId: string;
     ids: string[];
+    datasetId?: string | undefined;
     domain?: string | undefined;
 }>;
 export declare const socrataToolZodSchema: z.ZodObject<{
