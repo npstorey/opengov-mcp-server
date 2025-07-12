@@ -90,7 +90,8 @@ describe('OpenAI Initialize Request', () => {
         capabilities: {
           tools: {
             supported: true
-          }
+          },
+          types: ['search']
         },
         serverInfo: {
           name: 'test-server',
@@ -103,7 +104,7 @@ describe('OpenAI Initialize Request', () => {
       return { 
         tools: [
           {
-            name: 'test_tool',
+            name: 'search',  // Changed from test_tool for OpenAI compatibility
             description: 'A test tool for unit tests',
             parameters: {
               type: 'object',
@@ -185,6 +186,9 @@ describe('OpenAI Initialize Request', () => {
     expect(response.text).toContain('"result":');
     expect(response.text).toContain('"protocolVersion":"2025-03-26"');
     expect(response.text).toContain('"serverInfo":{"name":"test-server","version":"1.0.0"}');
+    
+    // Verify types array is included for OpenAI deep-research compatibility
+    expect(response.text).toContain('"types":["search"]');
     
     // Note: roots.listChanged event is emitted in production but not in test environment
   });
@@ -413,8 +417,8 @@ describe('OpenAI Initialize Request', () => {
     expect(toolsResponse.text).toContain('event: message');
     // Verify tools are returned
     expect(toolsResponse.text).toContain('"result":{"tools":[');
-    expect(toolsResponse.text).toContain('"name":"test_tool"');
-    expect(toolsResponse.text).toContain('"description":"A test tool for unit tests"');
+    expect(toolsResponse.text).toContain('"name":"search"');
+    expect(toolsResponse.text).toContain('"description":"');
     expect(toolsResponse.text).toContain('"parameters"');
     expect(toolsResponse.text).toContain('"inputSchema"');
     

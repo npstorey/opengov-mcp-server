@@ -76,7 +76,8 @@ async function createServer(): Promise<Server> {
         capabilities: {
           tools: {
             supported: true
-          }
+          },
+          types: ['search']
         },
         serverInfo: {
           name: 'opengov-mcp-server',
@@ -95,7 +96,7 @@ async function createServer(): Promise<Server> {
     return {
       tools: [
         {
-          name: UNIFIED_SOCRATA_TOOL.name,
+          name: 'search',  // Renamed from get_data for OpenAI compatibility
           description: UNIFIED_SOCRATA_TOOL.description,
           parameters: UNIFIED_SOCRATA_TOOL.parameters,
           inputSchema: UNIFIED_SOCRATA_TOOL.parameters,
@@ -124,7 +125,8 @@ async function createServer(): Promise<Server> {
     const toolName = request.params.name;
     const toolArgs = request.params.arguments;
 
-    if (toolName === UNIFIED_SOCRATA_TOOL.name) {
+    // Accept both 'search' (for OpenAI) and original 'get_data' name
+    if (toolName === 'search' || toolName === UNIFIED_SOCRATA_TOOL.name) {
       try {
         console.log(`[Server] Calling tool: ${toolName} with args:`, JSON.stringify(toolArgs, null, 2));
         
