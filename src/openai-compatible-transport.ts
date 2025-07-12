@@ -99,20 +99,27 @@ export class OpenAICompatibleTransport extends StreamableHTTPServerTransport {
           }
         });
         
-        // Create a modified request object with the new stream
-        const modifiedReq = Object.create(req);
-        modifiedReq.headers = req.headers;
-        modifiedReq.method = req.method;
-        modifiedReq.url = req.url;
-        modifiedReq.body = req.body;
+        // Create a proxy that combines request properties with stream behavior
+        const streamProxy = new Proxy(req, {
+          get(target, prop) {
+            // For stream-specific methods, use bodyStream
+            if (prop === 'on' || prop === 'once' || prop === 'emit' || prop === 'addListener' || prop === 'removeListener') {
+              return bodyStream[prop].bind(bodyStream);
+            }
+            // For stream state properties, return bodyStream's values
+            if (prop === 'readable' || prop === 'readableEnded' || prop === 'readableFlowing') {
+              return bodyStream[prop];
+            }
+            // For read method, use bodyStream
+            if (prop === 'read') {
+              return bodyStream.read.bind(bodyStream);
+            }
+            // For everything else (headers, method, url, body), use the original request
+            return target[prop];
+          }
+        });
         
-        // Copy stream methods from bodyStream
-        modifiedReq.on = bodyStream.on.bind(bodyStream);
-        modifiedReq.once = bodyStream.once.bind(bodyStream);
-        modifiedReq.readable = true;
-        modifiedReq.readableEnded = false;
-        
-        return super.handleRequest(modifiedReq, res);
+        return super.handleRequest(streamProxy as any, res);
       }
     }
     

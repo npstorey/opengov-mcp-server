@@ -1,5 +1,7 @@
+import { describe, test, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
+import crypto from 'crypto';
 import { OpenAICompatibleTransport } from '../openai-compatible-transport.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
@@ -39,7 +41,11 @@ describe('OpenAI Initialize Request', () => {
     app.use('/mcp', express.text({ type: '*/*' }));
 
     // Create transport and server
-    transport = new OpenAICompatibleTransport();
+    transport = new OpenAICompatibleTransport({
+      sessionIdGenerator: () => {
+        return crypto.randomBytes(16).toString('hex');
+      }
+    });
     server = new Server(
       { name: 'test-server', version: '1.0.0' },
       {
@@ -200,5 +206,38 @@ describe('OpenAI Initialize Request', () => {
         tools: []
       }
     });
+  });
+
+  test('should handle OpenAI initialize without readableEnded error', async () => {
+    const initializeRequest = {
+      jsonrpc: "2.0",
+      method: "initialize",
+      id: 1,
+      params: {
+        protocolVersion: "2025-03-26",
+        capabilities: {},
+        clientInfo: { name: "openai-mcp", version: "1.0.0" }
+      }
+    };
+
+    const response = await request(app)
+      .post('/mcp')
+      .set('Accept', 'application/json, text/event-stream')
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify(initializeRequest));
+
+    // Should not get internal server error (readableEnded error would return 500)
+    expect(response.status).toBe(200);
+    
+    // Should have session ID in header
+    expect(response.headers['mcp-session-id']).toBeDefined();
+    expect(response.headers['mcp-session-id']).toMatch(/^[a-f0-9]{32}$/);
+    
+    // Content-type should be SSE stream
+    expect(response.headers['content-type']).toBe('text/event-stream');
+    
+    // No error in response (the readableEnded error is fixed)
+    expect(response.text).not.toContain('Cannot set property readableEnded');
+    expect(response.text).not.toContain('Internal server error');
   });
 });
