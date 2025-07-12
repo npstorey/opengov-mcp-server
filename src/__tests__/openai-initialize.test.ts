@@ -4,8 +4,16 @@ import express from 'express';
 import crypto from 'crypto';
 import { OpenAICompatibleTransport } from '../openai-compatible-transport.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { ListToolsRequestSchema, CallToolRequestSchema, ListPromptsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+
+// Workaround: Define ListPromptsRequestSchema locally since it's not properly exported from SDK
+const ListPromptsRequestSchema = z.object({
+  method: z.literal("prompts/list"),
+  params: z.optional(z.object({
+    cursor: z.optional(z.string())
+  }))
+});
 
 describe('OpenAI Initialize Request', () => {
   let app: express.Application;

@@ -12,7 +12,15 @@ import {
   socrataToolZodSchema,
 } from './tools/socrata-tools.js';
 import { z } from 'zod';
-import { ListToolsRequestSchema, CallToolRequestSchema, ListPromptsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+
+// Workaround: Define ListPromptsRequestSchema locally since it's not properly exported from SDK
+const ListPromptsRequestSchema = z.object({
+  method: z.literal("prompts/list"),
+  params: z.optional(z.object({
+    cursor: z.optional(z.string())
+  }))
+});
 
 dotenv.config();
 
