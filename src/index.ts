@@ -11,7 +11,7 @@ import {
   socrataToolZodSchema,
 } from './tools/socrata-tools.js';
 import { z } from 'zod';
-import { ListToolsRequestSchema, CallToolRequestSchema, InitializeRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
 dotenv.config();
 
