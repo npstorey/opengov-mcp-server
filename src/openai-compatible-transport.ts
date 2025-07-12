@@ -145,6 +145,25 @@ export class OpenAICompatibleTransport extends StreamableHTTPServerTransport {
     return super.handleRequest(req, res);
   }
 
+  // Override validateSession to allow initialize requests before server is initialized
+  protected validateSession(req: any, res: any): boolean {
+    // Check if this is an initialize request by peeking at the body
+    if (req.method === 'POST' && req.body) {
+      try {
+        const parsedBody = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+        if (parsedBody && parsedBody.method === 'initialize') {
+          // Allow initialize requests to bypass validation
+          return true;
+        }
+      } catch (e) {
+        // If we can't parse the body, fall back to default validation
+      }
+    }
+    
+    // For non-initialize requests, use default validation
+    return super.validateSession(req, res);
+  }
+
   close(): Promise<void> {
     this.sessionStore.clear();
     this.connectionSessions.clear();

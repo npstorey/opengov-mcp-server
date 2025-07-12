@@ -156,7 +156,7 @@ describe('OpenAI Initialize Request', () => {
     expect(response.status).toBe(406);
   });
 
-  test.skip('should handle requests with existing session ID', async () => {
+  test('should handle requests with existing session ID', async () => {
     // First, initialize to get a session ID
     const initializeRequest = {
       jsonrpc: "2.0",
@@ -280,7 +280,7 @@ describe('OpenAI Initialize Request', () => {
     expect(secondResponse.text).toContain('Server already initialized');
   });
 
-  test.skip('should handle full OpenAI sequence: initialize → notifications/initialized → GET', async () => {
+  test('should handle full OpenAI sequence: initialize → notifications/initialized → GET', async () => {
     // Step 1: Send initialize request
     const initializeRequest = {
       jsonrpc: "2.0",
@@ -304,6 +304,10 @@ describe('OpenAI Initialize Request', () => {
     expect(sessionId).toBeDefined();
     expect(sessionId).toMatch(/^[a-f0-9]{32}$/);
     
+    // Verify the server is now initialized
+    expect(initResponse.text).toContain('"result":');
+    expect(initResponse.text).not.toContain('Server not initialized');
+    
     // Step 2: Send notifications/initialized
     const notificationsRequest = {
       method: "notifications/initialized",
@@ -321,6 +325,7 @@ describe('OpenAI Initialize Request', () => {
     expect(notifResponse.status).toBe(202);
     expect(notifResponse.text).not.toContain('stream is not readable');
     expect(notifResponse.text).not.toContain('Parse error');
+    expect(notifResponse.text).not.toContain('Server not initialized');
     
     // Step 3: Send GET request for SSE stream
     const getResponse = await request(app)
@@ -330,5 +335,5 @@ describe('OpenAI Initialize Request', () => {
 
     expect(getResponse.status).toBe(200);
     expect(getResponse.headers['content-type']).toBe('text/event-stream');
-  });
+  }, 10000); // Increase timeout to 10 seconds
 });
