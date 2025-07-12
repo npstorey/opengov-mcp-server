@@ -5,6 +5,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import crypto from 'crypto';
 import {
   UNIFIED_SOCRATA_TOOL,
   socrataToolZodSchema,
@@ -30,9 +31,50 @@ async function createServer(): Promise<Server> {
     }
   );
 
+  // Wrap setRequestHandler to log all registrations and calls
+  const originalSetRequestHandler = server.setRequestHandler.bind(server);
+  server.setRequestHandler = function(schema: any, handler: any) {
+    console.log('[Server] Registering handler for schema:', schema);
+    return originalSetRequestHandler(schema, async (request: any, ...args: any[]) => {
+      console.log('[Server] Handler called with request:', JSON.stringify(request, null, 2));
+      try {
+        const result = await handler(request, ...args);
+        console.log('[Server] Handler returned:', JSON.stringify(result, null, 2));
+        return result;
+      } catch (error) {
+        console.error('[Server] Handler error:', error);
+        throw error;
+      }
+    });
+  };
+
+  // Handle Initialize - OpenAI sends this first
+  try {
+    const InitializeRequestSchema = z.object({
+      method: z.literal('initialize'),
+      params: z.any()
+    });
+    
+    server.setRequestHandler(InitializeRequestSchema, async (request) => {
+      console.log('[Server - Initialize] Request received');
+      return {
+        protocolVersion: '2025-01-01',
+        capabilities: {
+          tools: {}
+        },
+        serverInfo: {
+          name: 'opengov-mcp-server',
+          version: '0.1.1'
+        }
+      };
+    });
+  } catch (e) {
+    console.log('[Server] Could not register initialize handler:', e);
+  }
+
   // Handle ListTools
   server.setRequestHandler(ListToolsRequestSchema, async (request) => {
-    console.log('[Server] ListTools request received');
+    console.log('[Server - ListTools] Request received');
     
     return {
       tools: [
@@ -105,6 +147,7 @@ async function createServer(): Promise<Server> {
 
 async function startApp() {
   let transport: StreamableHTTPServerTransport | undefined;
+  let server: Server | undefined;
   
   try {
     const app = express();
@@ -142,13 +185,26 @@ async function startApp() {
     app.get('/', (_req, res) => {
       res.send('OpenGov MCP Server running');
     });
+    
+    // Debug endpoint to test server
+    app.get('/debug', async (_req, res) => {
+      console.log('[Debug] Testing server state...');
+      res.json({
+        server: 'running',
+        transport: !!transport,
+        serverConnected: !!server,
+        environment: {
+          DATA_PORTAL_URL: process.env.DATA_PORTAL_URL
+        }
+      });
+    });
 
     // Create transport
     console.log('[MCP] Creating transport...');
     transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => {
-        const sessionId = 'session-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-        console.log('[Transport] Generated session ID:', sessionId);
+        const sessionId = crypto.randomBytes(16).toString('hex');
+        console.log('[Transport] sessionIdGenerator called! Generated:', sessionId);
         return sessionId;
       }
     });
@@ -156,25 +212,67 @@ async function startApp() {
     // Log transport events if available
     if ('onsessioninitialized' in transport) {
       transport.onsessioninitialized = (sessionId: string) => {
-        console.log('[Transport] Session initialized:', sessionId);
+        console.log('[Transport] onsessioninitialized fired! Session:', sessionId);
       };
     }
+    
+    transport.onmessage = (message: any, extra?: any) => {
+      console.log('[Transport] onmessage fired!', JSON.stringify(message, null, 2));
+      if (extra) {
+        console.log('[Transport] onmessage extra:', JSON.stringify(extra, null, 2));
+      }
+    };
 
     transport.onerror = (error: any) => {
-      console.error('[Transport] Error:', error);
+      console.error('[Transport] onerror fired! Error:', error);
     };
 
     transport.onclose = () => {
-      console.log('[Transport] Connection closed');
+      console.log('[Transport] onclose fired!');
+    };
+    
+    // Wrap handleRequest to see what's happening
+    const originalHandleRequest = transport.handleRequest.bind(transport);
+    transport.handleRequest = async (req: any, res: any) => {
+      console.log('[Transport.handleRequest] Called');
+      console.log('[Transport.handleRequest] Method:', req.method);
+      console.log('[Transport.handleRequest] URL:', req.url);
+      
+      try {
+        const result = await originalHandleRequest(req, res);
+        console.log('[Transport.handleRequest] Completed, result:', result);
+        return result;
+      } catch (error) {
+        console.error('[Transport.handleRequest] Error:', error);
+        throw error;
+      }
     };
 
     // Create server
-    const server = await createServer();
+    server = await createServer();
     
     // Connect server to transport
     console.log('[MCP] Connecting server to transport...');
+    
+    // Add extra logging to ensure connection works
+    const originalConnect = server.connect.bind(server);
+    server.connect = async (transport: any) => {
+      console.log('[Server.connect] Connecting...');
+      const result = await originalConnect(transport);
+      console.log('[Server.connect] Connected!');
+      return result;
+    };
+    
     await server.connect(transport);
     console.log('[MCP] Server connected');
+    
+    // Verify the connection
+    console.log('[MCP] Transport has session handlers:', {
+      onmessage: !!transport.onmessage,
+      onerror: !!transport.onerror,
+      onclose: !!transport.onclose,
+      onsessioninitialized: !!transport.onsessioninitialized
+    });
 
     // MCP endpoint
     app.all(mcpPath, async (req, res) => {
@@ -185,15 +283,50 @@ async function startApp() {
         'mcp-session-id': req.headers['mcp-session-id']
       });
       
+      // For POST requests, check if body is readable
+      if (req.method === 'POST') {
+        console.log('[Express] Request readable:', req.readable);
+        console.log('[Express] Request readableEnded:', req.readableEnded);
+      }
+      
       if (!transport) {
         console.error('[Express] Transport not initialized!');
         res.status(503).send('Service Unavailable');
         return;
       }
       
+      // Log response events
+      const originalEnd = res.end;
+      const originalWrite = res.write;
+      const originalSetHeader = res.setHeader;
+      
+      res.setHeader = function(name: string, value: any) {
+        console.log(`[Express] Response.setHeader: ${name} = ${value}`);
+        return originalSetHeader.call(this, name, value);
+      };
+      
+      res.write = function(chunk: any) {
+        console.log('[Express] Response.write called, data length:', chunk ? chunk.length : 0);
+        if (chunk && chunk.length < 500) {
+          console.log('[Express] Response.write data:', chunk.toString());
+        }
+        return originalWrite.call(this, chunk);
+      };
+      
+      res.end = function(...args: any[]) {
+        console.log('[Express] Response.end called with args:', args.length);
+        if (args[0]) {
+          console.log('[Express] Response.end data:', args[0].toString().substring(0, 500));
+        }
+        return originalEnd.apply(this, args);
+      };
+      
       try {
+        console.log('[Express] Calling transport.handleRequest...');
         await transport.handleRequest(req, res);
-        console.log('[Express] Request handled by transport');
+        console.log('[Express] transport.handleRequest returned');
+        console.log('[Express] Response headersSent:', res.headersSent);
+        console.log('[Express] Response finished:', res.finished);
       } catch (error) {
         console.error('[Express] Error handling request:', error);
         if (!res.headersSent) {
@@ -207,11 +340,21 @@ async function startApp() {
       console.log(`🚀 Server running on port ${port}`);
       console.log(`   Health: http://localhost:${port}/healthz`);
       console.log(`   MCP: http://localhost:${port}/mcp`);
+      console.log(`   Debug: http://localhost:${port}/debug`);
+      console.log('[Startup] Transport ready:', !!transport);
+      console.log('[Startup] Server ready:', !!server);
     });
 
     // Graceful shutdown
     const gracefulShutdown = async (signal: string) => {
       console.log(`${signal} signal received: closing resources.`);
+      
+      if (server) {
+        console.log('Closing server...');
+        if ('close' in server && typeof server.close === 'function') {
+          await server.close().catch((e: any) => console.error('Error closing server:', e));
+        }
+      }
       
       if (transport) {
         console.log('Closing transport...');
@@ -232,6 +375,13 @@ async function startApp() {
     
     if (transport) {
       await transport.close().catch((e: any) => console.error('Error closing transport during fatal error:', e));
+    }
+    
+    if (server) {
+      // Server might not have a close method, but we can try
+      if ('close' in server && typeof server.close === 'function') {
+        await server.close().catch((e: any) => console.error('Error closing server during fatal error:', e));
+      }
     }
     
     process.exit(1);
