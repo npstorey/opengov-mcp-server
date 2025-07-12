@@ -31,6 +31,23 @@ async function createLowLevelServerInstance(): Promise<Server> {
     }
   );
 
+  // Add a general request handler to log all incoming requests
+  const originalSetRequestHandler = baseServer.setRequestHandler.bind(baseServer);
+  baseServer.setRequestHandler = function(schema: any, handler: any) {
+    console.log('[Server] Registering handler for schema:', schema.shape ? Object.keys(schema.shape) : schema);
+    return originalSetRequestHandler.call(this, schema, async (request: any, ...args: any[]) => {
+      console.log('[Server] Request received:', request.method || 'unknown method', JSON.stringify(request, null, 2));
+      try {
+        const result = await handler(request, ...args);
+        console.log('[Server] Response:', JSON.stringify(result, null, 2));
+        return result;
+      } catch (error) {
+        console.error('[Server] Handler error:', error);
+        throw error;
+      }
+    });
+  };
+
   // Handle ListTools
   baseServer.setRequestHandler(ListToolsRequestSchema, async (request) => {
     console.log('[Server - ListTools] Received ListTools request:', JSON.stringify(request, null, 2));
@@ -136,6 +153,9 @@ async function startApp() {
 
     const port = Number(process.env.PORT) || 8000;
 
+    // Log environment
+    console.log('[Environment] DATA_PORTAL_URL:', process.env.DATA_PORTAL_URL);
+
     // Health check
     app.get('/healthz', (_req, res) => {
       console.log('[MCP Health] /healthz endpoint hit');
@@ -145,13 +165,10 @@ async function startApp() {
     // Create transport instance
     console.log('[MCP Setup] Creating main transport instance...');
     mainTransportInstance = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => Math.random().toString(36).slice(2),
-      // Add logging for debugging
-      onMessage: (message: any) => {
-        console.log('[Transport onMessage]', JSON.stringify(message, null, 2));
-      },
-      onError: (error: any) => {
-        console.error('[Transport onError]', error);
+      sessionIdGenerator: () => {
+        const sessionId = 'session-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+        console.log('[Transport] Generated session ID:', sessionId);
+        return sessionId;
       }
     });
     
@@ -162,14 +179,46 @@ async function startApp() {
       };
     }
     
+    // Add message logging
+    mainTransportInstance.onmessage = (message: any, sessionId?: string) => {
+      console.log('[Transport onmessage] Received message:', JSON.stringify(message, null, 2));
+      if (sessionId) {
+        console.log('[Transport onmessage] Session ID:', sessionId);
+      }
+    };
+    
+    mainTransportInstance.onerror = (error: any) => {
+      console.error('[MCP Transport - onerror] Transport-level error:', error);
+    };
+    
+    mainTransportInstance.onclose = () => {
+      console.log('[MCP Transport - onclose] Main transport connection closed/terminated by transport itself.');
+    };
+    
+    // Try to see all events on the transport
+    console.log('[MCP Setup] Transport event names:', Object.getOwnPropertyNames(mainTransportInstance).filter(p => p.startsWith('on')));
+    
     // Override or wrap handleRequest to add logging
     const originalHandleRequest = mainTransportInstance.handleRequest.bind(mainTransportInstance);
     mainTransportInstance.handleRequest = async (req: any, res: any) => {
       console.log(`[Transport handleRequest] ${req.method} ${req.url}`);
       console.log('[Transport handleRequest] Headers:', req.headers);
+      
+      // Add session tracking
+      const sessionId = req.headers['mcp-session-id'] || req.headers['x-session-id'];
+      if (sessionId) {
+        console.log('[Transport handleRequest] Using session ID:', sessionId);
+      }
+      
       try {
         const result = await originalHandleRequest(req, res);
         console.log('[Transport handleRequest] Request handled successfully');
+        
+        // Check if this was an initialize request
+        if (req.method === 'POST') {
+          console.log('[Transport handleRequest] POST request completed - checking for follow-up connections...');
+        }
+        
         return result;
       } catch (error) {
         console.error('[Transport handleRequest] Error:', error);
@@ -189,16 +238,18 @@ async function startApp() {
     
     // Connect server to transport
     console.log('[MCP Setup] Connecting single Server (low-level) to main transport...');
+    
+    // Add debug logging to see connection details
+    const originalConnect = lowLevelServer.connect.bind(lowLevelServer);
+    lowLevelServer.connect = async function(transport: any) {
+      console.log('[Server.connect] Connecting to transport...');
+      const result = await originalConnect(transport);
+      console.log('[Server.connect] Connected successfully');
+      return result;
+    };
+    
     await lowLevelServer.connect(mainTransportInstance);
     console.log('[MCP Setup] Server connected ✅');
-    
-    mainTransportInstance.onerror = (error: any) => {
-      console.error('[MCP Transport - onerror] Transport-level error:', error);
-    };
-    
-    mainTransportInstance.onclose = () => {
-      console.log('[MCP Transport - onclose] Main transport connection closed/terminated by transport itself.');
-    };
     
     // Accept-header shim for OpenAI connector
     app.use(mcpPath, (req, _res, next) => {
@@ -212,6 +263,10 @@ async function startApp() {
     // Main MCP route - let the transport handle everything
     app.all(mcpPath, (req, res) => {
       console.log(`[Express /mcp ENTRY] Method: ${req.method}, URL: ${req.originalUrl}, Origin: ${req.headers.origin}`);
+      console.log(`[Express /mcp] Session headers:`, {
+        'mcp-session-id': req.headers['mcp-session-id'],
+        'x-session-id': req.headers['x-session-id']
+      });
       
       if (!mainTransportInstance) {
         console.error('[Express Route /mcp] Main transport not initialized!');
@@ -265,6 +320,25 @@ async function startApp() {
     
     app.get('/', (req, res) => {
       res.status(200).send('OpenGov MCP Server is running. MCP endpoint at /mcp.');
+    });
+    
+    // Add a test endpoint to manually check our tools
+    app.get('/test-tools', async (req, res) => {
+      console.log('[Test] Manually triggering tools list...');
+      try {
+        const tools = {
+          tools: [{
+            name: UNIFIED_SOCRATA_TOOL.name,
+            description: UNIFIED_SOCRATA_TOOL.description,
+            parameters: UNIFIED_SOCRATA_TOOL.parameters,
+            inputSchema: UNIFIED_SOCRATA_TOOL.parameters,
+          }]
+        };
+        res.json(tools);
+      } catch (error) {
+        console.error('[Test] Error:', error);
+        res.status(500).json({ error: String(error) });
+      }
     });
     
     const httpServer = app.listen(port, '0.0.0.0', () => {
