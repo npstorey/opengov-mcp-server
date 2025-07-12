@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
 import dotenv from 'dotenv';
@@ -9,8 +9,92 @@ import {
   UNIFIED_SOCRATA_TOOL,
   socrataToolZodSchema,
 } from './tools/socrata-tools.js';
+import { z } from 'zod';
+import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
 dotenv.config();
+
+async function createServer(): Promise<Server> {
+  console.log('[Server] Creating Server instance...');
+  
+  const server = new Server(
+    { name: 'opengov-mcp-server', version: '0.1.1' },
+    {
+      capabilities: {
+        tools: {},
+        prompts: {},
+        roots: { listChanged: true },
+        sampling: {}
+      },
+      authMethods: []
+    }
+  );
+
+  // Handle ListTools
+  server.setRequestHandler(ListToolsRequestSchema, async (request) => {
+    console.log('[Server] ListTools request received');
+    
+    return {
+      tools: [
+        {
+          name: UNIFIED_SOCRATA_TOOL.name,
+          description: UNIFIED_SOCRATA_TOOL.description,
+          parameters: UNIFIED_SOCRATA_TOOL.parameters,
+          inputSchema: UNIFIED_SOCRATA_TOOL.parameters,
+        },
+      ],
+    };
+  });
+
+  // Handle CallTool
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    console.log('[Server] CallTool request:', JSON.stringify(request, null, 2));
+    
+    if (!request.params || typeof request.params !== 'object') {
+      throw new Error('Invalid params: missing params object');
+    }
+
+    const toolName = request.params.name;
+    const toolArgs = request.params.arguments;
+
+    if (toolName === UNIFIED_SOCRATA_TOOL.name) {
+      try {
+        const parsed = socrataToolZodSchema.parse(toolArgs);
+        const handler = UNIFIED_SOCRATA_TOOL.handler;
+        if (typeof handler !== 'function') {
+          throw new Error('Tool handler is not a function');
+        }
+        
+        const result = await handler(parsed);
+        console.log('[Tool] Result:', JSON.stringify(result, null, 2));
+        
+        let responseText: string;
+        if (result === null || result === undefined) {
+          responseText = String(result);
+        } else if (typeof result === 'string') {
+          responseText = result;
+        } else if (typeof result === 'number' || typeof result === 'boolean') {
+          responseText = result.toString();
+        } else {
+          responseText = JSON.stringify(result, null, 2);
+        }
+        
+        return {
+          content: [{ type: 'text', text: responseText }],
+          isError: false
+        };
+      } catch (error) {
+        console.error('[Tool] Error:', error);
+        throw error;
+      }
+    } else {
+      throw new Error(`Method not found: ${toolName}`);
+    }
+  });
+
+  console.log('[Server] Server instance created');
+  return server;
+}
 
 async function startApp() {
   try {
@@ -39,53 +123,6 @@ async function startApp() {
       res.send('OpenGov MCP Server running');
     });
 
-    // Create MCP server
-    console.log('[MCP] Creating server...');
-    const mcpServer = new McpServer(
-      {
-        name: 'opengov-mcp-server',
-        version: '0.1.1'
-      },
-      {
-        capabilities: {
-          tools: {},
-          logging: {}
-        }
-      }
-    );
-
-    // Register the unified tool
-    console.log('[MCP] Registering tool:', UNIFIED_SOCRATA_TOOL.name);
-    mcpServer.tool(
-      UNIFIED_SOCRATA_TOOL.name,
-      UNIFIED_SOCRATA_TOOL.description,
-      UNIFIED_SOCRATA_TOOL.parameters,
-      async (args: any) => {
-        console.log('[Tool] Called with args:', JSON.stringify(args, null, 2));
-        try {
-          const parsed = socrataToolZodSchema.parse(args);
-          const handler = UNIFIED_SOCRATA_TOOL.handler;
-          if (typeof handler !== 'function') {
-            throw new Error('Tool handler is not a function');
-          }
-          const result = await handler(parsed);
-          console.log('[Tool] Result:', JSON.stringify(result, null, 2));
-          return {
-            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }]
-          };
-        } catch (error) {
-          console.error('[Tool] Error:', error);
-          return {
-            content: [{ 
-              type: 'text', 
-              text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}` 
-            }],
-            isError: true
-          };
-        }
-      }
-    );
-
     // Create transport
     console.log('[MCP] Creating transport...');
     const transport = new StreamableHTTPServerTransport({
@@ -96,12 +133,15 @@ async function startApp() {
       }
     });
 
+    // Create server
+    const server = await createServer();
+    
     // Connect server to transport
     console.log('[MCP] Connecting server to transport...');
-    await mcpServer.connect(transport);
+    await server.connect(transport);
     console.log('[MCP] Server connected');
 
-    // MCP endpoint - minimal logging
+    // MCP endpoint
     app.all(mcpPath, async (req, res) => {
       console.log(`[Express] ${req.method} ${req.url}`);
       
