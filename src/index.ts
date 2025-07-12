@@ -11,7 +11,7 @@ import {
   socrataToolZodSchema,
 } from './tools/socrata-tools.js';
 import { z } from 'zod';
-import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { ListToolsRequestSchema, CallToolRequestSchema, InitializeRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
 dotenv.config();
 
@@ -35,16 +35,18 @@ async function createLowLevelServerInstance(): Promise<Server> {
   baseServer.setRequestHandler(ListToolsRequestSchema, async (request) => {
     console.log('[Server - ListTools] Received ListTools request:', JSON.stringify(request, null, 2));
     
-    return {
-      tools: [
-        {
-          name: UNIFIED_SOCRATA_TOOL.name,
-          description: UNIFIED_SOCRATA_TOOL.description,
-          parameters: UNIFIED_SOCRATA_TOOL.parameters,
-          inputSchema: UNIFIED_SOCRATA_TOOL.parameters,
-        },
-      ],
-    };
+    const tools = [
+      {
+        name: UNIFIED_SOCRATA_TOOL.name,
+        description: UNIFIED_SOCRATA_TOOL.description,
+        parameters: UNIFIED_SOCRATA_TOOL.parameters,
+        inputSchema: UNIFIED_SOCRATA_TOOL.parameters,
+      },
+    ];
+    
+    console.log('[Server - ListTools] Returning tools:', JSON.stringify(tools, null, 2));
+    
+    return { tools };
   });
 
   // Handle CallTool
@@ -143,8 +145,40 @@ async function startApp() {
     // Create transport instance
     console.log('[MCP Setup] Creating main transport instance...');
     mainTransportInstance = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => Math.random().toString(36).slice(2)
+      sessionIdGenerator: () => Math.random().toString(36).slice(2),
+      // Add logging for debugging
+      onMessage: (message: any) => {
+        console.log('[Transport onMessage]', JSON.stringify(message, null, 2));
+      },
+      onError: (error: any) => {
+        console.error('[Transport onError]', error);
+      }
     });
+    
+    // Log when sessions are initialized
+    if ('onsessioninitialized' in mainTransportInstance) {
+      mainTransportInstance.onsessioninitialized = (sessionId: string) => {
+        console.log('[MCP Transport] Session initialized:', sessionId);
+      };
+    }
+    
+    // Override or wrap handleRequest to add logging
+    const originalHandleRequest = mainTransportInstance.handleRequest.bind(mainTransportInstance);
+    mainTransportInstance.handleRequest = async (req: any, res: any) => {
+      console.log(`[Transport handleRequest] ${req.method} ${req.url}`);
+      console.log('[Transport handleRequest] Headers:', req.headers);
+      if (req.body) {
+        console.log('[Transport handleRequest] Body:', req.body);
+      }
+      try {
+        const result = await originalHandleRequest(req, res);
+        console.log('[Transport handleRequest] Request handled successfully');
+        return result;
+      } catch (error) {
+        console.error('[Transport handleRequest] Error:', error);
+        throw error;
+      }
+    };
     
     if ('onsessioninitialized' in mainTransportInstance) {
       mainTransportInstance.onsessioninitialized = (sessionId: string) => {
@@ -177,6 +211,9 @@ async function startApp() {
       }
       next();
     });
+    
+    // Parse body as text for MCP endpoint
+    app.use(mcpPath, express.text({ type: '*/*' }));
     
     // Main MCP route - let the transport handle everything
     app.all(mcpPath, (req, res) => {
