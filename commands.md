@@ -67,7 +67,56 @@ curl -X POST http://localhost:10000/mcp \
   -d '{"jsonrpc":"2.0","method":"tools/list","id":3}'
 ```
 
-### 5. Open SSE Stream (use session ID from step 1)
+Expected response shows two tools:
+- `search`: Returns array of {id, score} pairs
+- `document_retrieval`: Returns array of full documents
+
+### 5. Call Search Tool (use session ID from step 1)
+```bash
+curl -X POST http://localhost:10000/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "mcp-session-id: YOUR_SESSION_ID_HERE" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "id": 4,
+    "params": {
+      "name": "search",
+      "arguments": {
+        "datasetId": "8k4n-qdj6",
+        "query": "restaurant",
+        "limit": 10
+      }
+    }
+  }'
+```
+
+Returns: `[{"id": "row_0", "score": 0.85}, {"id": "row_1", "score": 0.72}, ...]`
+
+### 6. Call Document Retrieval Tool (use session ID from step 1)
+```bash
+curl -X POST http://localhost:10000/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "mcp-session-id: YOUR_SESSION_ID_HERE" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "id": 5,
+    "params": {
+      "name": "document_retrieval",
+      "arguments": {
+        "datasetId": "8k4n-qdj6",
+        "ids": ["row_0", "row_1", "row_2"]
+      }
+    }
+  }'
+```
+
+Returns: `[{full document 1}, {full document 2}, {full document 3}]`
+
+### 7. Open SSE Stream (use session ID from step 1)
 ```bash
 curl -X GET http://localhost:10000/mcp \
   -H "Accept: text/event-stream" \

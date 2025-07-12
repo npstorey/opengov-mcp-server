@@ -19,6 +19,7 @@ import {
 } from './tools/socrata-tools.js';
 import { z } from 'zod';
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { McpError, ErrorCode } from './utils/mcp-errors.js';
 
 // Workaround: Define ListPromptsRequestSchema locally since it's not properly exported from SDK
 const ListPromptsRequestSchema = z.object({
@@ -112,12 +113,6 @@ async function createServer(): Promise<Server> {
           description: DOCUMENT_RETRIEVAL_TOOL.description,
           parameters: DOCUMENT_RETRIEVAL_TOOL.parameters,
           inputSchema: DOCUMENT_RETRIEVAL_TOOL.parameters,
-        },
-        {
-          name: 'get_data',  // Keep original tool for backward compatibility
-          description: UNIFIED_SOCRATA_TOOL.description,
-          parameters: UNIFIED_SOCRATA_TOOL.parameters,
-          inputSchema: UNIFIED_SOCRATA_TOOL.parameters,
         },
       ],
     };

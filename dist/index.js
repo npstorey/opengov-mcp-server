@@ -92,12 +92,6 @@ async function createServer() {
                     parameters: DOCUMENT_RETRIEVAL_TOOL.parameters,
                     inputSchema: DOCUMENT_RETRIEVAL_TOOL.parameters,
                 },
-                {
-                    name: 'get_data', // Keep original tool for backward compatibility
-                    description: UNIFIED_SOCRATA_TOOL.description,
-                    parameters: UNIFIED_SOCRATA_TOOL.parameters,
-                    inputSchema: UNIFIED_SOCRATA_TOOL.parameters,
-                },
             ],
         };
     });

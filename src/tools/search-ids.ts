@@ -1,4 +1,5 @@
 import { fetchFromSocrataApi } from '../utils/api.js';
+import { McpError, ErrorCode } from '../utils/mcp-errors.js';
 
 // Size limits
 const MAX_OBJECT_SIZE_KB = 2; // 2KB per object
@@ -9,10 +10,8 @@ export interface SearchResult {
   score: number;
 }
 
-export interface SearchIdsResponse {
-  results: SearchResult[];
-  total_count: number;
-}
+// Remove the wrapper interface - we'll return SearchResult[] directly
+export type SearchIdsResponse = SearchResult[];
 
 /**
  * Calculate a relevance score based on search criteria
@@ -105,6 +104,16 @@ export async function searchIds(params: {
     offset = 0 
   } = params;
 
+  // Pre-flight check: estimate response size
+  // Each object is roughly {id: "string", score: number} ≈ 100 bytes average
+  const estimatedSizeBytes = limit * 100;
+  if (estimatedSizeBytes > MAX_TOTAL_SIZE_MB * 1024 * 1024) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      `Request would exceed size limit of ${MAX_TOTAL_SIZE_MB}MB. Reduce limit parameter.`
+    );
+  }
+
   const apiParams: Record<string, unknown> = {
     $limit: limit,
     $offset: offset
@@ -177,40 +186,15 @@ export async function searchIds(params: {
     // Sort by score descending
     results.sort((a, b) => b.score - a.score);
 
-    // Get total count if possible
-    let totalCount = results.length;
-    
-    // If we got a full page, there might be more
-    if (rows.length === limit) {
-      // Try to get actual count
-      try {
-        const countParams: Record<string, unknown> = {
-          $select: 'count(*)',
-          $limit: 1
-        };
-        
-        if (query) countParams.$q = query;
-        if (where) countParams.$where = where;
-        
-        const countResult = await fetchFromSocrataApi<Array<{ count: string }>>(
-          `/resource/${datasetId}.json`,
-          countParams,
-          baseUrl
-        );
-        
-        totalCount = parseInt(countResult[0]?.count || String(results.length), 10);
-      } catch (error) {
-        console.warn('[SearchIds] Could not get total count:', error);
-        // Use result length as fallback
-      }
-    }
-
-    return {
-      results,
-      total_count: totalCount
-    };
+    return results;
   } catch (error) {
     console.error('[SearchIds] Search error:', error);
-    throw new Error(`Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    if (error instanceof McpError) {
+      throw error;
+    }
+    throw new McpError(
+      ErrorCode.InternalError,
+      `Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
   }
 }

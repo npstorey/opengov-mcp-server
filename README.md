@@ -13,6 +13,15 @@ The original server enables MCP clients to access Socrata Open Data APIs, allowi
 *   Running SQL-like queries (SoQL) to retrieve and analyze data.
 *   Getting portal usage statistics.
 
+This fork implements two primary MCP tools for OpenAI compatibility:
+
+*   **search**: Returns matching document IDs with relevance scores (Array<{id: string, score: number}>)
+    *   Size limits: 2KB per object, 10MB total response
+    *   Pre-flight validation throws MCP errors for oversized requests
+*   **document_retrieval**: Fetches full document content by IDs (up to 50 documents per request)
+    *   Size limits: 50 documents max per request, 20KB per document
+    *   Includes LRU caching with 5-minute TTL to reduce API calls
+
 ## Goals of This Fork
 
 1.  **Remote Deployability:** Refactor the server to use an HTTP-based MCP transport (e.g., `StreamableHTTPServerTransport` or `StreamableHTTPServerTransport` from the `@modelcontextprotocol/sdk`) to allow deployment as a web service.

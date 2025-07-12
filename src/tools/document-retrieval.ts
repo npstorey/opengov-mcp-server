@@ -1,5 +1,6 @@
 import { fetchFromSocrataApi } from '../utils/api.js';
 import { documentCache } from '../utils/cache.js';
+import { McpError, ErrorCode } from '../utils/mcp-errors.js';
 
 // Size limits
 const MAX_ROWS_PER_REQUEST = 50; // Maximum 50 rows per request
@@ -12,14 +13,8 @@ export interface DocumentRetrievalRequest {
   domain: string;
 }
 
-export interface DocumentRetrievalResponse {
-  documents: any[];
-  is_sample: boolean;
-  returned_rows: number;
-  total_requested: number;
-  has_more?: boolean;
-  errors?: string[];
-}
+// Return just an array of documents
+export type DocumentRetrievalResponse = any[];
 
 /**
  * Generate cache key for a request
@@ -119,13 +114,15 @@ export async function retrieveDocuments(
 ): Promise<DocumentRetrievalResponse> {
   const { ids, datasetId, domain } = request;
   
-  // Enforce maximum rows limit
-  const requestedIds = ids.slice(0, MAX_ROWS_PER_REQUEST);
-  const hasMore = ids.length > MAX_ROWS_PER_REQUEST;
-  
-  if (hasMore) {
-    console.warn(`[DocumentRetrieval] Requested ${ids.length} documents, limiting to ${MAX_ROWS_PER_REQUEST}`);
+  // Pre-flight check: validate request size
+  if (ids.length > MAX_ROWS_PER_REQUEST) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      `Cannot retrieve more than ${MAX_ROWS_PER_REQUEST} documents at once. Requested: ${ids.length}`
+    );
   }
+  
+  const requestedIds = ids;
   
   // Check cache first
   const cacheKey = getCacheKey(datasetId, requestedIds);
@@ -221,38 +218,27 @@ export async function retrieveDocuments(
       }
     }
     
-    const response: DocumentRetrievalResponse = {
-      documents,
-      is_sample: false,
-      returned_rows: documents.length,
-      total_requested: ids.length,
-      has_more: hasMore,
-      errors: errors.length > 0 ? errors : undefined
-    };
-    
     // Cache the result
-    documentCache.set(cacheKey, response);
+    documentCache.set(cacheKey, documents);
     
-    return response;
+    return documents;
     
   } catch (error) {
     console.error('[DocumentRetrieval] Error fetching documents:', error);
     
     // Return partial results if any
     if (documents.length > 0) {
-      const response: DocumentRetrievalResponse = {
-        documents,
-        is_sample: false,
-        returned_rows: documents.length,
-        total_requested: ids.length,
-        has_more: hasMore,
-        errors: [`Partial failure: ${error instanceof Error ? error.message : 'Unknown error'}`]
-      };
-      return response;
+      return documents;
     }
     
     // Complete failure
-    throw new Error(`Document retrieval failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    if (error instanceof McpError) {
+      throw error;
+    }
+    throw new McpError(
+      ErrorCode.InternalError,
+      `Document retrieval failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
   }
 }
 
@@ -330,19 +316,16 @@ export async function retrieveAllDocuments(params: {
       }
     }
     
-    const response: DocumentRetrievalResponse = {
-      documents,
-      is_sample: !fetchAll && totalCount > requestedLimit,
-      returned_rows: documents.length,
-      total_requested: fetchAll ? totalCount : requestedLimit,
-      has_more: offset + documents.length < totalCount,
-      errors: errors.length > 0 ? errors : undefined
-    };
-    
-    return response;
+    return documents;
     
   } catch (error) {
     console.error('[DocumentRetrieval] Error fetching all documents:', error);
-    throw new Error(`Document retrieval failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    if (error instanceof McpError) {
+      throw error;
+    }
+    throw new McpError(
+      ErrorCode.InternalError,
+      `Document retrieval failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
   }
 }

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { searchIds } from './search-ids.js';
 import { retrieveDocuments, retrieveAllDocuments } from './document-retrieval.js';
 import { documentCache } from '../utils/cache.js';
+import { McpError } from '../utils/mcp-errors.js';
 
 // Mock the API module
 vi.mock('../utils/api.js', () => ({
@@ -33,10 +34,9 @@ describe('Split Tools - Search and Document Retrieval', () => {
         limit: 10
       });
 
-      expect(result.results).toHaveLength(2);
-      expect(result.results[0]).toHaveProperty('id');
-      expect(result.results[0]).toHaveProperty('score');
-      expect(result.total_count).toBe(2);
+      expect(result).toHaveLength(2);
+      expect(result[0]).toHaveProperty('id');
+      expect(result[0]).toHaveProperty('score');
     });
 
     it('should handle missing ID fields gracefully', async () => {
@@ -52,8 +52,8 @@ describe('Split Tools - Search and Document Retrieval', () => {
         limit: 10
       });
 
-      expect(result.results).toHaveLength(1);
-      expect(result.results[0].id).toMatch(/^row_\d+$/);
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toMatch(/^row_\d+$/);
     });
 
     it('should enforce size limits', async () => {
@@ -75,8 +75,8 @@ describe('Split Tools - Search and Document Retrieval', () => {
       });
 
       // Should return all 200 since each object is small enough
-      expect(result.results.length).toBeGreaterThan(0);
-      expect(result.total_count).toBe(200);
+      expect(result.length).toBeGreaterThan(0);
+      expect(result.length).toBeLessThanOrEqual(200);
     });
   });
 
@@ -98,33 +98,20 @@ describe('Split Tools - Search and Document Retrieval', () => {
         domain: 'data.example.com'
       });
 
-      expect(result.documents).toHaveLength(2);
-      expect(result.returned_rows).toBe(2);
-      expect(result.total_requested).toBe(2);
-      expect(result.is_sample).toBe(false);
+      expect(result).toHaveLength(2);
+      expect(result[0]).toHaveProperty(':id', '123');
+      expect(result[1]).toHaveProperty(':id', '456');
     });
 
     it('should enforce maximum rows per request', async () => {
       const ids = Array(100).fill(null).map((_, i) => `id-${i}`);
-      const mockData = Array(50).fill(null).map((_, i) => ({
-        ':id': `id-${i}`,
-        name: `Document ${i}`
-      }));
 
-      // Mock for detectIdField
-      mockFetchFromSocrataApi.mockResolvedValueOnce([{ ':id': 'test' }]);
-      // Mock for actual data fetch
-      mockFetchFromSocrataApi.mockResolvedValueOnce(mockData);
-
-      const result = await retrieveDocuments({
+      // Should throw an error for too many IDs
+      await expect(retrieveDocuments({
         ids,
         datasetId: 'test-dataset',
         domain: 'data.example.com'
-      });
-
-      expect(result.has_more).toBe(true);
-      expect(result.total_requested).toBe(100);
-      expect(result.returned_rows).toBe(50);
+      })).rejects.toThrow('Cannot retrieve more than 50 documents at once');
     });
 
     it('should use cache for repeated requests', async () => {
@@ -173,7 +160,7 @@ describe('Split Tools - Search and Document Retrieval', () => {
         domain: 'data.example.com'
       });
 
-      expect(result.documents).toHaveLength(3);
+      expect(result).toHaveLength(3);
       expect(mockFetchFromSocrataApi).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
@@ -202,9 +189,7 @@ describe('Split Tools - Search and Document Retrieval', () => {
         domain: 'data.example.com'
       });
 
-      expect(result.documents).toHaveLength(50);
-      expect(result.is_sample).toBe(true); // Because total (1000) > returned (50)
-      expect(result.has_more).toBe(true);
+      expect(result).toHaveLength(50);
     });
 
     it('should handle "all" limit request', async () => {
@@ -224,8 +209,7 @@ describe('Split Tools - Search and Document Retrieval', () => {
         limit: 'all'
       });
 
-      expect(result.is_sample).toBe(false);
-      expect(result.total_requested).toBe(100);
+      expect(result).toHaveLength(100);
     });
   });
 });
