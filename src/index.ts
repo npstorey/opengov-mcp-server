@@ -305,20 +305,35 @@ async function startApp() {
         return originalSetHeader.call(this, name, value);
       };
       
-      res.write = function(chunk: any) {
+      res.write = function(chunk: any, encoding?: any, callback?: any) {
         console.log('[Express] Response.write called, data length:', chunk ? chunk.length : 0);
         if (chunk && chunk.length < 500) {
           console.log('[Express] Response.write data:', chunk.toString());
         }
-        return originalWrite.call(this, chunk);
+        if (typeof encoding === 'function') {
+          callback = encoding;
+          encoding = undefined;
+        }
+        return originalWrite.call(this, chunk, encoding, callback);
       };
       
-      res.end = function(...args: any[]) {
-        console.log('[Express] Response.end called with args:', args.length);
-        if (args[0]) {
-          console.log('[Express] Response.end data:', args[0].toString().substring(0, 500));
+      res.end = function(chunk?: any, encoding?: any, callback?: any) {
+        console.log('[Express] Response.end called');
+        if (chunk) {
+          const preview = typeof chunk === 'string' ? chunk.substring(0, 500) : 
+                          Buffer.isBuffer(chunk) ? chunk.toString().substring(0, 500) : 
+                          'non-string data';
+          console.log('[Express] Response.end data:', preview);
         }
-        return originalEnd.apply(this, args);
+        if (typeof chunk === 'function') {
+          callback = chunk;
+          chunk = undefined;
+          encoding = undefined;
+        } else if (typeof encoding === 'function') {
+          callback = encoding;
+          encoding = undefined;
+        }
+        return originalEnd.call(this, chunk, encoding, callback);
       };
       
       try {
