@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { DatasetMetadata, CategoryInfo, TagInfo, ColumnInfo, PortalMetrics } from '../utils/api.js';
+import { SearchIdsResponse } from './search-ids.js';
+import { DocumentRetrievalResponse } from './document-retrieval.js';
 declare function handleCatalog(params: {
     query?: string;
     domain?: string;
@@ -37,6 +39,41 @@ declare function handleDataAccess(params: {
 declare function handleSiteMetrics(params: {
     domain?: string;
 }): Promise<PortalMetrics>;
+export declare const searchToolZodSchema: z.ZodObject<{
+    datasetId: z.ZodString;
+    domain: z.ZodOptional<z.ZodString>;
+    query: z.ZodOptional<z.ZodString>;
+    where: z.ZodOptional<z.ZodString>;
+    limit: z.ZodOptional<z.ZodNumber>;
+    offset: z.ZodOptional<z.ZodNumber>;
+}, "strip", z.ZodTypeAny, {
+    datasetId: string;
+    offset?: number | undefined;
+    query?: string | undefined;
+    domain?: string | undefined;
+    where?: string | undefined;
+    limit?: number | undefined;
+}, {
+    datasetId: string;
+    offset?: number | undefined;
+    query?: string | undefined;
+    domain?: string | undefined;
+    where?: string | undefined;
+    limit?: number | undefined;
+}>;
+export declare const documentRetrievalZodSchema: z.ZodObject<{
+    ids: z.ZodArray<z.ZodString, "many">;
+    datasetId: z.ZodString;
+    domain: z.ZodOptional<z.ZodString>;
+}, "strip", z.ZodTypeAny, {
+    datasetId: string;
+    ids: string[];
+    domain?: string | undefined;
+}, {
+    datasetId: string;
+    ids: string[];
+    domain?: string | undefined;
+}>;
 export declare const socrataToolZodSchema: z.ZodObject<{
     type: z.ZodEnum<["catalog", "metadata", "query", "metrics"]>;
     query: z.ZodOptional<z.ZodString>;
@@ -78,7 +115,11 @@ export declare const socrataToolZodSchema: z.ZodObject<{
     having?: string | undefined;
 }>;
 export type SocrataToolParams = z.infer<typeof socrataToolZodSchema>;
+export type SearchToolParams = z.infer<typeof searchToolZodSchema>;
+export type DocumentRetrievalParams = z.infer<typeof documentRetrievalZodSchema>;
 export declare const UNIFIED_SOCRATA_TOOL: Tool;
+export declare const SEARCH_TOOL: Tool;
+export declare const DOCUMENT_RETRIEVAL_TOOL: Tool;
 export declare function handleSocrataTool(params: SocrataToolParams): Promise<unknown>;
 export declare const handleCatalogTool: typeof handleCatalog;
 export declare const handleCategoriesTool: typeof handleCategories;
@@ -87,5 +128,7 @@ export declare const handleDatasetMetadataTool: typeof handleDatasetMetadata;
 export declare const handleColumnInfoTool: typeof handleColumnInfo;
 export declare const handleDataAccessTool: typeof handleDataAccess;
 export declare const handleSiteMetricsTool: typeof handleSiteMetrics;
+export declare function handleSearchTool(params: SearchToolParams): Promise<SearchIdsResponse>;
+export declare function handleDocumentRetrievalTool(params: DocumentRetrievalParams): Promise<DocumentRetrievalResponse>;
 export declare const SOCRATA_TOOLS: any[];
 export {};

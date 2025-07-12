@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { fetchFromSocrataApi } from '../utils/api.js';
 import { handleSearch } from './search.js';
+import { searchIds } from './search-ids.js';
+import { retrieveDocuments, retrieveAllDocuments } from './document-retrieval.js';
 // import { McpToolHandlerContext } from '@modelcontextprotocol/sdk/types.js'; // Removed incorrect import
 // Get the default domain from environment
 const getDefaultDomain = () => {
@@ -130,6 +132,22 @@ async function handleSiteMetrics(params) {
     const response = await fetchFromSocrataApi('/api/site_metrics.json', {}, baseUrl);
     return response;
 }
+// Zod schemas for different tool types
+// Search tool schema - returns only id/score pairs
+export const searchToolZodSchema = z.object({
+    datasetId: z.string().describe('Dataset ID to search'),
+    domain: z.string().optional().describe('The Socrata domain (e.g., data.cityofnewyork.us)'),
+    query: z.string().optional().describe('Search query for full-text search'),
+    where: z.string().optional().describe('SoQL WHERE clause'),
+    limit: z.number().int().positive().optional().describe('Number of results to return'),
+    offset: z.number().int().nonnegative().optional().describe('Offset for pagination')
+});
+// Document retrieval tool schema - fetches full documents by IDs
+export const documentRetrievalZodSchema = z.object({
+    ids: z.array(z.string()).describe('Array of document IDs to retrieve'),
+    datasetId: z.string().describe('Dataset ID to retrieve documents from'),
+    domain: z.string().optional().describe('The Socrata domain (e.g., data.cityofnewyork.us)')
+});
 // 1️⃣ Zod definition for the Socrata tool's parameters.
 // This is used by the MCP SDK to parse/validate parameters from the client.
 export const socrataToolZodSchema = z.object({
@@ -211,6 +229,60 @@ const jsonParameters = {
     },
     required: ['type']
 };
+// JSON schemas for the new tools
+const searchJsonParameters = {
+    type: 'object',
+    properties: {
+        datasetId: {
+            type: 'string',
+            description: 'Dataset ID to search'
+        },
+        domain: {
+            type: 'string',
+            description: 'The Socrata domain (e.g., data.cityofnewyork.us)'
+        },
+        query: {
+            type: 'string',
+            description: 'Search query for full-text search'
+        },
+        where: {
+            type: 'string',
+            description: 'SoQL WHERE clause'
+        },
+        limit: {
+            type: 'integer',
+            minimum: 1,
+            description: 'Number of results to return'
+        },
+        offset: {
+            type: 'integer',
+            minimum: 0,
+            description: 'Offset for pagination'
+        }
+    },
+    required: ['datasetId']
+};
+const documentRetrievalJsonParameters = {
+    type: 'object',
+    properties: {
+        ids: {
+            type: 'array',
+            items: {
+                type: 'string'
+            },
+            description: 'Array of document IDs to retrieve'
+        },
+        datasetId: {
+            type: 'string',
+            description: 'Dataset ID to retrieve documents from'
+        },
+        domain: {
+            type: 'string',
+            description: 'The Socrata domain (e.g., data.cityofnewyork.us)'
+        }
+    },
+    required: ['ids', 'datasetId']
+};
 // 3️⃣ Tool uses the manually crafted JSON schema
 export const UNIFIED_SOCRATA_TOOL = {
     name: 'get_data',
@@ -220,6 +292,22 @@ export const UNIFIED_SOCRATA_TOOL = {
     // Assert the handler type to satisfy the generic Tool.handler signature.
     // The actual call from src/index.ts will provide the correctly typed SocrataToolParams.
     handler: handleSocrataTool
+};
+// New search tool that returns only id/score pairs
+export const SEARCH_TOOL = {
+    name: 'search',
+    description: 'Search Socrata datasets and return matching document IDs with relevance scores.',
+    parameters: searchJsonParameters,
+    inputSchema: searchJsonParameters,
+    handler: handleSearchTool
+};
+// New document retrieval tool
+export const DOCUMENT_RETRIEVAL_TOOL = {
+    name: 'document_retrieval',
+    description: 'Retrieve full document content from Socrata datasets by document IDs.',
+    parameters: documentRetrievalJsonParameters,
+    inputSchema: documentRetrievalJsonParameters,
+    handler: handleDocumentRetrievalTool
 };
 // Main handler function that dispatches to specific handlers based on type
 // It now expects parameters already parsed by the MCP SDK according to socrataToolZodSchema.
@@ -346,6 +434,37 @@ export const handleDatasetMetadataTool = handleDatasetMetadata;
 export const handleColumnInfoTool = handleColumnInfo;
 export const handleDataAccessTool = handleDataAccess;
 export const handleSiteMetricsTool = handleSiteMetrics;
-// Export all tools as an array (only contains the unified tool now)
-export const SOCRATA_TOOLS = [UNIFIED_SOCRATA_TOOL];
+// Handler for the new search tool
+export async function handleSearchTool(params) {
+    // Ensure default domain if not provided
+    const domain = params.domain || getDefaultDomain();
+    return searchIds({
+        datasetId: params.datasetId,
+        domain,
+        query: params.query,
+        where: params.where,
+        limit: params.limit,
+        offset: params.offset
+    });
+}
+// Handler for the new document retrieval tool
+export async function handleDocumentRetrievalTool(params) {
+    // Ensure default domain if not provided
+    const domain = params.domain || getDefaultDomain();
+    // If no IDs provided, retrieve all documents with default limits
+    if (!params.ids || params.ids.length === 0) {
+        return retrieveAllDocuments({
+            datasetId: params.datasetId,
+            domain
+        });
+    }
+    // Otherwise retrieve specific documents by IDs
+    return retrieveDocuments({
+        ids: params.ids,
+        datasetId: params.datasetId,
+        domain
+    });
+}
+// Export all tools as an array (now includes all three tools)
+export const SOCRATA_TOOLS = [UNIFIED_SOCRATA_TOOL, SEARCH_TOOL, DOCUMENT_RETRIEVAL_TOOL];
 //# sourceMappingURL=socrata-tools.js.map

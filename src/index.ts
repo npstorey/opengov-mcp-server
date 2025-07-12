@@ -9,7 +9,13 @@ import cors from 'cors';
 import crypto from 'crypto';
 import {
   UNIFIED_SOCRATA_TOOL,
+  SEARCH_TOOL,
+  DOCUMENT_RETRIEVAL_TOOL,
   socrataToolZodSchema,
+  searchToolZodSchema,
+  documentRetrievalZodSchema,
+  handleSearchTool,
+  handleDocumentRetrievalTool
 } from './tools/socrata-tools.js';
 import { z } from 'zod';
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
@@ -77,7 +83,7 @@ async function createServer(): Promise<Server> {
           tools: {
             supported: true
           },
-          types: ['search']
+          types: ['search', 'document_retrieval']
         },
         serverInfo: {
           name: 'opengov-mcp-server',
@@ -96,7 +102,19 @@ async function createServer(): Promise<Server> {
     return {
       tools: [
         {
-          name: 'search',  // Renamed from get_data for OpenAI compatibility
+          name: 'search',
+          description: SEARCH_TOOL.description,
+          parameters: SEARCH_TOOL.parameters,
+          inputSchema: SEARCH_TOOL.parameters,
+        },
+        {
+          name: 'document_retrieval',
+          description: DOCUMENT_RETRIEVAL_TOOL.description,
+          parameters: DOCUMENT_RETRIEVAL_TOOL.parameters,
+          inputSchema: DOCUMENT_RETRIEVAL_TOOL.parameters,
+        },
+        {
+          name: 'get_data',  // Keep original tool for backward compatibility
           description: UNIFIED_SOCRATA_TOOL.description,
           parameters: UNIFIED_SOCRATA_TOOL.parameters,
           inputSchema: UNIFIED_SOCRATA_TOOL.parameters,
@@ -125,8 +143,56 @@ async function createServer(): Promise<Server> {
     const toolName = request.params.name;
     const toolArgs = request.params.arguments;
 
-    // Accept both 'search' (for OpenAI) and original 'get_data' name
-    if (toolName === 'search' || toolName === UNIFIED_SOCRATA_TOOL.name) {
+    // Handle new search tool
+    if (toolName === 'search') {
+      try {
+        console.log(`[Server] Calling search tool with args:`, JSON.stringify(toolArgs, null, 2));
+        
+        const parsed = searchToolZodSchema.parse(toolArgs);
+        console.log(`[Server] Parsed search params:`, JSON.stringify(parsed, null, 2));
+        
+        const result = await handleSearchTool(parsed);
+        console.log('[Tool] Search result:', JSON.stringify(result, null, 2));
+        
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          isError: false
+        };
+      } catch (error) {
+        console.error('[Tool] Search error:', error);
+        if (error instanceof z.ZodError) {
+          console.error('[Server] ZodError issues:', JSON.stringify(error.issues, null, 2));
+        }
+        throw error;
+      }
+    }
+    
+    // Handle document retrieval tool
+    if (toolName === 'document_retrieval') {
+      try {
+        console.log(`[Server] Calling document_retrieval tool with args:`, JSON.stringify(toolArgs, null, 2));
+        
+        const parsed = documentRetrievalZodSchema.parse(toolArgs);
+        console.log(`[Server] Parsed document retrieval params:`, JSON.stringify(parsed, null, 2));
+        
+        const result = await handleDocumentRetrievalTool(parsed);
+        console.log('[Tool] Document retrieval result:', JSON.stringify(result, null, 2));
+        
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          isError: false
+        };
+      } catch (error) {
+        console.error('[Tool] Document retrieval error:', error);
+        if (error instanceof z.ZodError) {
+          console.error('[Server] ZodError issues:', JSON.stringify(error.issues, null, 2));
+        }
+        throw error;
+      }
+    }
+    
+    // Handle original get_data tool for backward compatibility
+    if (toolName === UNIFIED_SOCRATA_TOOL.name) {
       try {
         console.log(`[Server] Calling tool: ${toolName} with args:`, JSON.stringify(toolArgs, null, 2));
         
