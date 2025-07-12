@@ -214,6 +214,8 @@ async function startApp() {
       transport.onsessioninitialized = (sessionId: string) => {
         console.log('[Transport] onsessioninitialized fired! Session:', sessionId);
       };
+    } else {
+      console.log('[Transport] WARNING: onsessioninitialized not found on transport');
     }
     
     transport.onmessage = (message: any, extra?: any) => {
@@ -254,6 +256,13 @@ async function startApp() {
     // Connect server to transport
     console.log('[MCP] Connecting server to transport...');
     
+    // Check transport state before connection
+    console.log('[MCP] Transport state before connection:', {
+      hasServer: !!(transport as any)._server,
+      hasHandleRequest: !!transport.handleRequest,
+      transportType: transport.constructor.name
+    });
+    
     // Add extra logging to ensure connection works
     const originalConnect = server.connect.bind(server);
     server.connect = async (transport: any) => {
@@ -265,6 +274,13 @@ async function startApp() {
     
     await server.connect(transport);
     console.log('[MCP] Server connected');
+    
+    // Check transport state after connection
+    console.log('[MCP] Transport state after connection:', {
+      hasServer: !!(transport as any)._server,
+      serverName: (transport as any)._server?.name,
+      isConnected: !!(transport as any)._session
+    });
     
     // Verify the connection
     console.log('[MCP] Transport has session handlers:', {
@@ -280,13 +296,25 @@ async function startApp() {
       console.log('[Express] Headers:', {
         'accept': req.headers.accept,
         'content-type': req.headers['content-type'],
-        'mcp-session-id': req.headers['mcp-session-id']
+        'mcp-session-id': req.headers['mcp-session-id'],
+        'x-session-id': req.headers['x-session-id']
       });
       
       // For POST requests, check if body is readable
       if (req.method === 'POST') {
         console.log('[Express] Request readable:', req.readable);
         console.log('[Express] Request readableEnded:', req.readableEnded);
+        
+        // Check if this is an initialize request by peeking at the body
+        let body = '';
+        req.on('data', (chunk) => {
+          body += chunk.toString();
+        });
+        req.on('end', () => {
+          if (body) {
+            console.log('[Express] Request body:', body);
+          }
+        });
       }
       
       if (!transport) {
