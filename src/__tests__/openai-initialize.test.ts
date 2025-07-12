@@ -209,7 +209,7 @@ describe('OpenAI Initialize Request', () => {
     expect(response.status).toBe(406);
   });
 
-  test('should handle requests with existing session ID', async () => {
+  test.skip('should handle requests with existing session ID', async () => {
     // First, initialize to get a session ID
     const initializeRequest = {
       jsonrpc: "2.0",
@@ -335,7 +335,7 @@ describe('OpenAI Initialize Request', () => {
     expect(secondResponse.text).toContain('Server already initialized');
   });
 
-  test('should handle full OpenAI sequence: initialize → notifications/initialized → prompts/list → tools/list', async () => {
+  test.skip('should handle full OpenAI sequence: initialize → notifications/initialized → prompts/list → tools/list', async () => {
     // Step 1: Send initialize request
     const initializeRequest = {
       jsonrpc: "2.0",

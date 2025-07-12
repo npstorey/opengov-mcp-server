@@ -277,8 +277,8 @@ describe('Socrata Tools', () => {
       await handleSocrataTool({ type: 'query', datasetId: 'abc-123', limit: 20 });
       await handleSocrataTool({ type: 'metrics' });
       
-      // Verify that each call counts
-      expect(mockedFetchFromSocrataApi).toHaveBeenCalledTimes(4);
+      // Verify that each call counts (query type makes 2 calls - count + data)
+      expect(mockedFetchFromSocrataApi).toHaveBeenCalledTimes(5);
     });
 
     it('should map query to $query for query operations', async () => {

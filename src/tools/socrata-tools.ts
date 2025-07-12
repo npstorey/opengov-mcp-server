@@ -42,13 +42,24 @@ async function handleCatalog(params: {
   }
 
   const baseUrl = `https://${domain}`;
-  const response = await fetchFromSocrataApi<{ results: DatasetMetadata[] }>(
+  const response = await fetchFromSocrataApi<{ results: any[] }>(
     '/api/catalog/v1',
     apiParams,
     baseUrl
   );
 
-  return response.results;
+  // Map the nested structure to our DatasetMetadata interface
+  return response.results.map((result: any) => ({
+    id: result.resource?.id || result.id,
+    name: result.resource?.name || result.name,
+    description: result.resource?.description || result.description,
+    datasetType: result.resource?.type || result.type,
+    category: result.classification?.domain_category,
+    tags: result.classification?.domain_tags || [],
+    createdAt: result.resource?.createdAt,
+    updatedAt: result.resource?.updatedAt,
+    ...result.resource // Include any other fields
+  } as DatasetMetadata));
 }
 
 // Handler for categories functionality
@@ -613,10 +624,14 @@ export async function handleSearchTool(
     });
     
     // Convert catalog results to search results with encoded dataset IDs
-    const searchResults: SearchResult[] = catalogResults.map((dataset, index) => ({
-      id: `${dataset.id}:catalog`, // Encode as datasetId:catalog to indicate this is a dataset result
-      score: 1.0 - (index * 0.1) // Simple scoring based on order
-    }));
+    const searchResults: SearchResult[] = catalogResults.map((dataset: any, index) => {
+      // Handle nested structure from catalog API
+      const datasetId = dataset.resource?.id || dataset.id;
+      return {
+        id: `${datasetId}:catalog`, // Encode as datasetId:catalog to indicate this is a dataset result
+        score: 1.0 - (index * 0.1) // Simple scoring based on order
+      };
+    });
     
     return searchResults;
   }

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { searchIds } from './search-ids.js';
 import { retrieveDocuments, retrieveAllDocuments } from './document-retrieval.js';
 import { documentCache } from '../utils/cache.js';
@@ -14,8 +14,12 @@ const mockFetchFromSocrataApi = fetchFromSocrataApi as unknown as ReturnType<typ
 
 describe('Split Tools - Search and Document Retrieval', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     documentCache.clear();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   describe('searchIds', () => {
