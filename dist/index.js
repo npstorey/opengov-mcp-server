@@ -291,9 +291,12 @@ async function startApp() {
                 'mcp-session-id': req.headers['mcp-session-id'],
                 'x-session-id': req.headers['x-session-id']
             });
+            // Track current request body for response interceptors
+            let currentRequestBody = null;
             // For POST requests, log parsed body (now available via Express body parser)
             if (req.method === 'POST' && req.body) {
                 console.log('[Express] Request body:', req.body);
+                currentRequestBody = req.body;
                 // Check if this is an initialize request without a session ID
                 try {
                     const parsed = JSON.parse(req.body);
@@ -315,6 +318,8 @@ async function startApp() {
             const originalWrite = res.write;
             const originalSetHeader = res.setHeader;
             const originalJson = res.json;
+            // Track if we're writing an initialize response
+            let isInitializeResponse = false;
             res.setHeader = function (name, value) {
                 console.log(`[Express] Response.setHeader: ${name} = ${value}`);
                 return originalSetHeader.call(this, name, value);
@@ -335,6 +340,20 @@ async function startApp() {
                 if (chunk && chunk.length < 500) {
                     console.log('[Express] Response.write data:', chunk.toString());
                 }
+                // Detect initialize response
+                if (chunk && currentRequestBody) {
+                    const chunkStr = chunk.toString();
+                    try {
+                        const parsed = JSON.parse(currentRequestBody);
+                        if (parsed.method === 'initialize' && chunkStr.includes('"result":') && chunkStr.includes('"protocolVersion":')) {
+                            isInitializeResponse = true;
+                            console.log('[Express] Detected initialize response');
+                        }
+                    }
+                    catch (e) {
+                        // Ignore parse errors
+                    }
+                }
                 if (typeof encoding === 'function') {
                     callback = encoding;
                     encoding = undefined;
@@ -348,6 +367,12 @@ async function startApp() {
                         Buffer.isBuffer(chunk) ? chunk.toString().substring(0, 500) :
                             'non-string data';
                     console.log('[Express] Response.end data:', preview);
+                }
+                // Emit roots update if this was an initialize response
+                if (isInitializeResponse && res.getHeader('Content-Type') === 'text/event-stream') {
+                    const rootsEvent = '\n\nevent: message\ndata: {"roots":{"listChanged":true}}\n\n';
+                    originalWrite.call(this, rootsEvent, 'utf8');
+                    console.log('[Express] Emitted roots.listChanged SSE event after initialize');
                 }
                 if (typeof chunk === 'function') {
                     callback = chunk;

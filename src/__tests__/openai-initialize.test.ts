@@ -185,6 +185,8 @@ describe('OpenAI Initialize Request', () => {
     expect(response.text).toContain('"result":');
     expect(response.text).toContain('"protocolVersion":"2025-03-26"');
     expect(response.text).toContain('"serverInfo":{"name":"test-server","version":"1.0.0"}');
+    
+    // Note: roots.listChanged event is emitted in production but not in test environment
   });
 
   test('should reject non-initialize requests without session ID', async () => {
