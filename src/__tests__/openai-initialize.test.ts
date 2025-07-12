@@ -52,6 +52,12 @@ describe('OpenAI Initialize Request', () => {
     transport = new OpenAICompatibleTransport({
       sessionIdGenerator: () => {
         return crypto.randomBytes(16).toString('hex');
+      },
+      onsessioninitialized: (sessionId: string) => {
+        console.log('[Test] Session initialized:', sessionId);
+      },
+      onsessionclosed: (sessionId: string) => {
+        console.log('[Test] Session closed:', sessionId);
       }
     });
     server = new Server(
@@ -82,7 +88,9 @@ describe('OpenAI Initialize Request', () => {
       return {
         protocolVersion: protocolVersion,
         capabilities: {
-          tools: {}
+          tools: {
+            supported: true
+          }
         },
         serverInfo: {
           name: 'test-server',
@@ -92,7 +100,34 @@ describe('OpenAI Initialize Request', () => {
     });
 
     server.setRequestHandler(ListToolsRequestSchema, async () => {
-      return { tools: [] };
+      return { 
+        tools: [
+          {
+            name: 'test_tool',
+            description: 'A test tool for unit tests',
+            parameters: {
+              type: 'object',
+              properties: {
+                input: {
+                  type: 'string',
+                  description: 'Test input'
+                }
+              },
+              required: ['input']
+            },
+            inputSchema: {
+              type: 'object',
+              properties: {
+                input: {
+                  type: 'string',
+                  description: 'Test input'
+                }
+              },
+              required: ['input']
+            }
+          }
+        ]
+      };
     });
 
     server.setRequestHandler(ListPromptsRequestSchema, async () => {
@@ -374,7 +409,12 @@ describe('OpenAI Initialize Request', () => {
 
     expect(toolsResponse.status).toBe(200);
     expect(toolsResponse.text).toContain('event: message');
-    expect(toolsResponse.text).toContain('"result":{"tools":[]}');
+    // Verify tools are returned
+    expect(toolsResponse.text).toContain('"result":{"tools":[');
+    expect(toolsResponse.text).toContain('"name":"test_tool"');
+    expect(toolsResponse.text).toContain('"description":"A test tool for unit tests"');
+    expect(toolsResponse.text).toContain('"parameters"');
+    expect(toolsResponse.text).toContain('"inputSchema"');
     
     // Step 5: Send GET request for SSE stream
     const getResponse = await request(app)

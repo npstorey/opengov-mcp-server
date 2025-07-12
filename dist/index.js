@@ -60,7 +60,9 @@ async function createServer() {
             return {
                 protocolVersion: protocolVersion,
                 capabilities: {
-                    tools: {}
+                    tools: {
+                        supported: true
+                    }
                 },
                 serverInfo: {
                     name: 'opengov-mcp-server',

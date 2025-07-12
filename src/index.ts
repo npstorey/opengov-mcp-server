@@ -74,7 +74,9 @@ async function createServer(): Promise<Server> {
       return {
         protocolVersion: protocolVersion,
         capabilities: {
-          tools: {}
+          tools: {
+            supported: true
+          }
         },
         serverInfo: {
           name: 'opengov-mcp-server',
