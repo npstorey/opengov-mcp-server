@@ -240,4 +240,56 @@ describe('OpenAI Initialize Request', () => {
     expect(response.text).not.toContain('Cannot set property readableEnded');
     expect(response.text).not.toContain('Internal server error');
   });
+
+  test('should handle full OpenAI sequence: initialize → notifications/initialized → GET', async () => {
+    // Step 1: Send initialize request
+    const initializeRequest = {
+      jsonrpc: "2.0",
+      method: "initialize",
+      id: 1,
+      params: {
+        protocolVersion: "2025-03-26",
+        capabilities: {},
+        clientInfo: { name: "openai-mcp", version: "1.0.0" }
+      }
+    };
+
+    const initResponse = await request(app)
+      .post('/mcp')
+      .set('Accept', 'application/json, text/event-stream')
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify(initializeRequest));
+
+    expect(initResponse.status).toBe(200);
+    const sessionId = initResponse.headers['mcp-session-id'];
+    expect(sessionId).toBeDefined();
+    expect(sessionId).toMatch(/^[a-f0-9]{32}$/);
+    
+    // Step 2: Send notifications/initialized
+    const notificationsRequest = {
+      method: "notifications/initialized",
+      jsonrpc: "2.0"
+    };
+
+    const notifResponse = await request(app)
+      .post('/mcp')
+      .set('Accept', 'application/json, text/event-stream')
+      .set('Content-Type', 'application/json')
+      .set('mcp-session-id', sessionId)
+      .send(JSON.stringify(notificationsRequest));
+
+    // Should not get stream error
+    expect(notifResponse.status).toBe(200);
+    expect(notifResponse.text).not.toContain('stream is not readable');
+    expect(notifResponse.text).not.toContain('Parse error');
+    
+    // Step 3: Send GET request for SSE stream
+    const getResponse = await request(app)
+      .get('/mcp')
+      .set('Accept', 'text/event-stream')
+      .set('mcp-session-id', sessionId);
+
+    expect(getResponse.status).toBe(200);
+    expect(getResponse.headers['content-type']).toBe('text/event-stream');
+  });
 });
