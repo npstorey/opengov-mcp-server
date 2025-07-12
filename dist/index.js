@@ -154,6 +154,8 @@ async function startApp() {
             }
             next();
         });
+        // Body parser for /mcp route - parse all content types as text to avoid stream consumption issues
+        app.use(mcpPath, express.text({ type: '*/*' }));
         // Health check
         app.get('/healthz', (_req, res) => {
             console.log('[Health] /healthz hit');
@@ -276,30 +278,19 @@ async function startApp() {
                 'mcp-session-id': req.headers['mcp-session-id'],
                 'x-session-id': req.headers['x-session-id']
             });
-            // For POST requests, check if body is readable
-            if (req.method === 'POST') {
-                console.log('[Express] Request readable:', req.readable);
-                console.log('[Express] Request readableEnded:', req.readableEnded);
-                // Check if this is an initialize request by peeking at the body
-                let body = '';
-                req.on('data', (chunk) => {
-                    body += chunk.toString();
-                });
-                req.on('end', () => {
-                    if (body) {
-                        console.log('[Express] Request body:', body);
-                        // Check if this is an initialize request without a session ID
-                        try {
-                            const parsed = JSON.parse(body);
-                            if (parsed.method === 'initialize' && !req.headers['mcp-session-id']) {
-                                console.log('[Express] Initialize request without session ID detected - this is expected for first request');
-                            }
-                        }
-                        catch (e) {
-                            // Ignore parse errors
-                        }
+            // For POST requests, log parsed body (now available via Express body parser)
+            if (req.method === 'POST' && req.body) {
+                console.log('[Express] Request body:', req.body);
+                // Check if this is an initialize request without a session ID
+                try {
+                    const parsed = JSON.parse(req.body);
+                    if (parsed.method === 'initialize' && !req.headers['mcp-session-id']) {
+                        console.log('[Express] Initialize request without session ID detected - this is expected for first request');
                     }
-                });
+                }
+                catch (e) {
+                    // Ignore parse errors
+                }
             }
             if (!transport) {
                 console.error('[Express] Transport not initialized!');

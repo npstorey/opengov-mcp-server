@@ -27,139 +27,93 @@ export class OpenAICompatibleTransport extends StreamableHTTPServerTransport {
     });
 
     // Check if this is a POST request that might be an initialize
-    if (req.method === 'POST' && !req.headers['mcp-session-id']) {
+    if (req.method === 'POST' && !req.headers['mcp-session-id'] && req.body) {
       console.log('[OpenAICompatibleTransport] POST without session ID - checking if initialize');
+      console.log('[OpenAICompatibleTransport] Request body:', req.body);
       
-      // We need to peek at the body to see if it's an initialize request
-      const chunks: Buffer[] = [];
       let isInitialize = false;
-      let body = '';
-      
-      // Store original methods
-      const originalOn = req.on.bind(req);
-      const originalOnce = req.once.bind(req);
-      
-      // Buffer the body data
-      req.on = function(event: string, listener: any) {
-        if (event === 'data') {
-          const wrappedListener = (chunk: Buffer) => {
-            chunks.push(chunk);
-            listener(chunk);
-          };
-          return originalOn(event, wrappedListener);
+      try {
+        const parsed = JSON.parse(req.body);
+        if (parsed.method === 'initialize') {
+          isInitialize = true;
+          console.log('[OpenAICompatibleTransport] Detected initialize request');
         }
-        return originalOn(event, listener);
-      };
+      } catch (e) {
+        console.log('[OpenAICompatibleTransport] Could not parse body as JSON');
+      }
       
-      req.once = function(event: string, listener: any) {
-        if (event === 'end') {
-          const wrappedListener = () => {
-            body = Buffer.concat(chunks).toString();
-            console.log('[OpenAICompatibleTransport] Request body:', body);
-            
-            try {
-              const parsed = JSON.parse(body);
-              if (parsed.method === 'initialize') {
-                isInitialize = true;
-                console.log('[OpenAICompatibleTransport] Detected initialize request');
-              }
-            } catch (e) {
-              console.log('[OpenAICompatibleTransport] Could not parse body as JSON');
-            }
-            
-            listener();
-          };
-          return originalOnce(event, wrappedListener);
-        }
-        return originalOnce(event, listener);
-      };
-      
-      // If it's an initialize request, generate a session ID and add it to the request
-      return new Promise<void>((resolve, reject) => {
-        req.once('end', async () => {
-          if (isInitialize) {
-            const sessionId = this.sessionIdGenerator();
-            this.sessionStore.set(sessionId, { createdAt: new Date(), initialized: false });
-            this.initializeRequests.add(sessionId);
-            
-            // Add the session ID to the request headers
-            req.headers['mcp-session-id'] = sessionId;
-            console.log('[OpenAICompatibleTransport] Added session ID to initialize request:', sessionId);
-            
-            // Wrap the response to add session ID header
-            const originalJson = res.json.bind(res);
-            const originalEnd = res.end.bind(res);
-            const originalWrite = res.write.bind(res);
-            
-            res.json = function(data: any) {
-              console.log('[OpenAICompatibleTransport] Intercepting json response for initialize');
-              res.setHeader('Mcp-Session-Id', sessionId);
-              return originalJson(data);
-            };
-            
-            res.end = function(chunk?: any, encoding?: any, callback?: any) {
-              console.log('[OpenAICompatibleTransport] Intercepting end response for initialize');
-              if (!res.headersSent) {
-                res.setHeader('Mcp-Session-Id', sessionId);
-              }
-              if (typeof chunk === 'function') {
-                callback = chunk;
-                chunk = undefined;
-                encoding = undefined;
-              } else if (typeof encoding === 'function') {
-                callback = encoding;
-                encoding = undefined;
-              }
-              return originalEnd.call(res, chunk, encoding, callback);
-            };
-            
-            res.write = function(chunk: any, encoding?: any, callback?: any) {
-              console.log('[OpenAICompatibleTransport] Intercepting write response for initialize');
-              if (!res.headersSent) {
-                res.setHeader('Mcp-Session-Id', sessionId);
-              }
-              if (typeof encoding === 'function') {
-                callback = encoding;
-                encoding = undefined;
-              }
-              return originalWrite.call(res, chunk, encoding, callback);
-            };
+      if (isInitialize) {
+        const sessionId = this.sessionIdGenerator();
+        this.sessionStore.set(sessionId, { createdAt: new Date(), initialized: false });
+        this.initializeRequests.add(sessionId);
+        
+        // Add the session ID to the request headers
+        req.headers['mcp-session-id'] = sessionId;
+        console.log('[OpenAICompatibleTransport] Added session ID to initialize request:', sessionId);
+        
+        // Wrap the response to add session ID header
+        const originalJson = res.json.bind(res);
+        const originalEnd = res.end.bind(res);
+        const originalWrite = res.write.bind(res);
+        
+        res.json = function(data: any) {
+          console.log('[OpenAICompatibleTransport] Intercepting json response for initialize');
+          res.setHeader('Mcp-Session-Id', sessionId);
+          return originalJson(data);
+        };
+        
+        res.end = function(chunk?: any, encoding?: any, callback?: any) {
+          console.log('[OpenAICompatibleTransport] Intercepting end response for initialize');
+          if (!res.headersSent) {
+            res.setHeader('Mcp-Session-Id', sessionId);
           }
-          
-          // Restore the request body for the parent handler
-          const restoredReq = Object.create(req);
-          restoredReq.headers = req.headers;
-          restoredReq.method = req.method;
-          restoredReq.url = req.url;
-          
-          let position = 0;
-          restoredReq.on = function(event: string, listener: any) {
-            if (event === 'data' && body) {
-              // Immediately emit the buffered data
-              process.nextTick(() => {
-                listener(Buffer.from(body));
-              });
-              return this;
-            } else if (event === 'end' && body) {
-              // Immediately emit end
-              process.nextTick(() => {
-                listener();
-              });
-              return this;
-            }
-            return originalOn(event, listener);
-          };
-          
-          restoredReq.once = restoredReq.on;
-          
-          try {
-            await super.handleRequest(restoredReq, res);
-            resolve();
-          } catch (error) {
-            reject(error);
+          if (typeof chunk === 'function') {
+            callback = chunk;
+            chunk = undefined;
+            encoding = undefined;
+          } else if (typeof encoding === 'function') {
+            callback = encoding;
+            encoding = undefined;
+          }
+          return originalEnd.call(res, chunk, encoding, callback);
+        };
+        
+        res.write = function(chunk: any, encoding?: any, callback?: any) {
+          console.log('[OpenAICompatibleTransport] Intercepting write response for initialize');
+          if (!res.headersSent) {
+            res.setHeader('Mcp-Session-Id', sessionId);
+          }
+          if (typeof encoding === 'function') {
+            callback = encoding;
+            encoding = undefined;
+          }
+          return originalWrite.call(res, chunk, encoding, callback);
+        };
+        
+        // Create a new readable stream from the parsed body for the parent handler
+        const { Readable } = await import('stream');
+        const bodyStream = new Readable({
+          read() {
+            this.push(req.body);
+            this.push(null);
           }
         });
-      });
+        
+        // Create a modified request object with the new stream
+        const modifiedReq = Object.create(req);
+        modifiedReq.headers = req.headers;
+        modifiedReq.method = req.method;
+        modifiedReq.url = req.url;
+        modifiedReq.body = req.body;
+        
+        // Copy stream methods from bodyStream
+        modifiedReq.on = bodyStream.on.bind(bodyStream);
+        modifiedReq.once = bodyStream.once.bind(bodyStream);
+        modifiedReq.readable = true;
+        modifiedReq.readableEnded = false;
+        
+        return super.handleRequest(modifiedReq, res);
+      }
     }
     
     // For all other requests, pass through to parent
