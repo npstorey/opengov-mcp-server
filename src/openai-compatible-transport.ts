@@ -31,6 +31,23 @@ export class OpenAICompatibleTransport extends StreamableHTTPServerTransport {
         if (options?.onsessioninitialized) {
           options.onsessioninitialized(sessionId);
         }
+      },
+      // Also handle session closed callback
+      onsessionclosed: (sessionId: string) => {
+        console.log('[OpenAICompatibleTransport] Session closed:', sessionId);
+        this.sessionStore.delete(sessionId);
+        
+        // Remove connection mapping for this session
+        for (const [connId, sessId] of this.connectionSessions.entries()) {
+          if (sessId === sessionId) {
+            this.connectionSessions.delete(connId);
+          }
+        }
+        
+        // Call the original callback if provided
+        if (options?.onsessionclosed) {
+          options.onsessionclosed(sessionId);
+        }
       }
     });
     

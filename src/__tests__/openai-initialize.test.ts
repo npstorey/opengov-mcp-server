@@ -4,7 +4,7 @@ import express from 'express';
 import crypto from 'crypto';
 import { OpenAICompatibleTransport } from '../openai-compatible-transport.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { ListToolsRequestSchema, CallToolRequestSchema, ListPromptsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 describe('OpenAI Initialize Request', () => {
@@ -85,6 +85,10 @@ describe('OpenAI Initialize Request', () => {
 
     server.setRequestHandler(ListToolsRequestSchema, async () => {
       return { tools: [] };
+    });
+
+    server.setRequestHandler(ListPromptsRequestSchema, async () => {
+      return { prompts: [] };
     });
 
     // Connect server to transport
@@ -280,7 +284,7 @@ describe('OpenAI Initialize Request', () => {
     expect(secondResponse.text).toContain('Server already initialized');
   });
 
-  test('should handle full OpenAI sequence: initialize → notifications/initialized → GET', async () => {
+  test('should handle full OpenAI sequence: initialize → notifications/initialized → prompts/list → tools/list', async () => {
     // Step 1: Send initialize request
     const initializeRequest = {
       jsonrpc: "2.0",
@@ -327,7 +331,44 @@ describe('OpenAI Initialize Request', () => {
     expect(notifResponse.text).not.toContain('Parse error');
     expect(notifResponse.text).not.toContain('Server not initialized');
     
-    // Step 3: Send GET request for SSE stream
+    // Step 3: Send prompts/list request
+    const promptsRequest = {
+      jsonrpc: "2.0",
+      method: "prompts/list",
+      id: 3
+    };
+
+    const promptsResponse = await request(app)
+      .post('/mcp')
+      .set('Accept', 'application/json, text/event-stream')
+      .set('Content-Type', 'application/json')
+      .set('mcp-session-id', sessionId)
+      .send(JSON.stringify(promptsRequest));
+
+    expect(promptsResponse.status).toBe(200);
+    expect(promptsResponse.text).toContain('event: message');
+    expect(promptsResponse.text).toContain('"result":{"prompts":[]}');
+    expect(promptsResponse.text).not.toContain('Method not found');
+    
+    // Step 4: Send tools/list request
+    const toolsRequest = {
+      jsonrpc: "2.0",
+      method: "tools/list",
+      id: 4
+    };
+
+    const toolsResponse = await request(app)
+      .post('/mcp')
+      .set('Accept', 'application/json, text/event-stream')
+      .set('Content-Type', 'application/json')
+      .set('mcp-session-id', sessionId)
+      .send(JSON.stringify(toolsRequest));
+
+    expect(toolsResponse.status).toBe(200);
+    expect(toolsResponse.text).toContain('event: message');
+    expect(toolsResponse.text).toContain('"result":{"tools":[]}');
+    
+    // Step 5: Send GET request for SSE stream
     const getResponse = await request(app)
       .get('/mcp')
       .set('Accept', 'text/event-stream')

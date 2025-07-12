@@ -12,7 +12,7 @@ import {
   socrataToolZodSchema,
 } from './tools/socrata-tools.js';
 import { z } from 'zod';
-import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { ListToolsRequestSchema, CallToolRequestSchema, ListPromptsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
 dotenv.config();
 
@@ -91,6 +91,15 @@ async function createServer(): Promise<Server> {
           inputSchema: UNIFIED_SOCRATA_TOOL.parameters,
         },
       ],
+    };
+  });
+
+  // Handle ListPrompts
+  server.setRequestHandler(ListPromptsRequestSchema, async (request) => {
+    console.log('[Server - ListPrompts] Request received');
+    
+    return {
+      prompts: []  // Return empty array for now
     };
   });
 
@@ -215,21 +224,19 @@ async function startApp() {
         const sessionId = crypto.randomBytes(16).toString('hex');
         console.log('[Transport] sessionIdGenerator called! Generated:', sessionId);
         return sessionId;
+      },
+      // Pass callbacks in constructor options
+      onsessioninitialized: (sessionId: string) => {
+        console.log('[Transport] onsessioninitialized fired! Session:', sessionId);
+      },
+      onsessionclosed: (sessionId: string) => {
+        console.log('[Transport] onsessionclosed fired! Session:', sessionId);
       }
     });
     
     console.log('[MCP] Transport created, checking properties...');
     console.log('[MCP] Transport prototype:', Object.getOwnPropertyNames(Object.getPrototypeOf(transport)));
     console.log('[MCP] Transport instance properties:', Object.getOwnPropertyNames(transport));
-
-    // Log transport events if available
-    if ('onsessioninitialized' in transport) {
-      transport.onsessioninitialized = (sessionId: string) => {
-        console.log('[Transport] onsessioninitialized fired! Session:', sessionId);
-      };
-    } else {
-      console.log('[Transport] WARNING: onsessioninitialized not found on transport');
-    }
     
     transport.onmessage = (message: any, extra?: any) => {
       console.log('[Transport] onmessage fired!', JSON.stringify(message, null, 2));
@@ -310,8 +317,7 @@ async function startApp() {
     console.log('[MCP] Transport has session handlers:', {
       onmessage: !!transport.onmessage,
       onerror: !!transport.onerror,
-      onclose: !!transport.onclose,
-      onsessioninitialized: !!transport.onsessioninitialized
+      onclose: !!transport.onclose
     });
 
     // MCP endpoint
