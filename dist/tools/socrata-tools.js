@@ -2,7 +2,10 @@ import { z } from 'zod';
 import { fetchFromSocrataApi } from '../utils/api.js';
 // import { McpToolHandlerContext } from '@modelcontextprotocol/sdk/types.js'; // Removed incorrect import
 // Get the default domain from environment
-const getDefaultDomain = () => process.env.DATA_PORTAL_URL?.replace(/^https?:\/\//, '');
+const getDefaultDomain = () => {
+    const url = process.env.DATA_PORTAL_URL || 'https://data.cityofnewyork.us';
+    return url.replace(/^https?:\/\//, '');
+};
 // Handler for catalog functionality
 async function handleCatalog(params) {
     const { query, domain = getDefaultDomain(), limit = 10, offset = 0 } = params;
@@ -209,6 +212,7 @@ export const UNIFIED_SOCRATA_TOOL = {
     name: 'get_data',
     description: 'A unified tool to interact with Socrata open-data portals.',
     parameters: jsonParameters,
+    inputSchema: jsonParameters, // Add this line
     // Assert the handler type to satisfy the generic Tool.handler signature.
     // The actual call from src/index.ts will provide the correctly typed SocrataToolParams.
     handler: handleSocrataTool

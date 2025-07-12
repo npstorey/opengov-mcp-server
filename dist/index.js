@@ -1,201 +1,152 @@
 #!/usr/bin/env node
-// import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'; // Will be replaced
-import { Server } from '@modelcontextprotocol/sdk/server/index.js'; // Low-level server
-import { createSimpleHTTPServerTransport } from '@modelcontextprotocol/sdk';
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { OpenAICompatibleTransport } from './openai-compatible-transport.js';
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import { UNIFIED_SOCRATA_TOOL, socrataToolZodSchema, } from './tools/socrata-tools.js';
 import crypto from 'crypto';
+import { UNIFIED_SOCRATA_TOOL, socrataToolZodSchema, } from './tools/socrata-tools.js';
 import { z } from 'zod';
-import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js'; // Import schema types
+import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 dotenv.config();
-// McpToolHandlerContext might not be directly used with the low-level Server in the same way.
-// We will manage context (like sessionId, sendNotification) differently if needed.
-async function createLowLevelServerInstance() {
-    console.log('[Server Factory] Creating low-level Server instance.');
-    const baseServer = new Server({ name: 'opengov-mcp-server', version: '0.1.1' }, // ServerInfo
-    {
+async function createServer() {
+    console.log('[Server] Creating Server instance...');
+    const server = new Server({ name: 'opengov-mcp-server', version: '0.1.1' }, {
         capabilities: {
             tools: {},
-            prompts: {}, // Explicitly declare prompts capability (even if empty)
-            roots: { listChanged: true }, // Standard capability
-            sampling: {} // Standard capability
+            prompts: {},
+            roots: { listChanged: true },
+            sampling: {}
         },
-        authMethods: [] // Explicitly state no authentication methods are offered
-    } // ServerOptions
-    );
-    // --- Handle ListTools --- 
-    baseServer.setRequestHandler(ListToolsRequestSchema, async (request) => {
-        console.log('[Server - ListTools] Received ListTools request:', JSON.stringify(request, null, 2));
-        // The UNIFIED_SOCRATA_TOOL.parameters is already our JSON schema object
+        authMethods: []
+    });
+    // Wrap setRequestHandler to log all registrations and calls
+    const originalSetRequestHandler = server.setRequestHandler.bind(server);
+    server.setRequestHandler = function (schema, handler) {
+        console.log('[Server] Registering handler for schema:', schema);
+        return originalSetRequestHandler(schema, async (request, ...args) => {
+            console.log('[Server] Handler called with request:', JSON.stringify(request, null, 2));
+            try {
+                const result = await handler(request, ...args);
+                console.log('[Server] Handler returned:', JSON.stringify(result, null, 2));
+                return result;
+            }
+            catch (error) {
+                console.error('[Server] Handler error:', error);
+                throw error;
+            }
+        });
+    };
+    // Handle Initialize - OpenAI sends this first
+    try {
+        const InitializeRequestSchema = z.object({
+            method: z.literal('initialize'),
+            params: z.object({
+                protocolVersion: z.string(),
+                capabilities: z.any().optional(),
+                clientInfo: z.any().optional()
+            })
+        });
+        server.setRequestHandler(InitializeRequestSchema, async (request) => {
+            console.log('[Server - Initialize] Request received:', JSON.stringify(request, null, 2));
+            const protocolVersion = request.params.protocolVersion || '2025-01-01';
+            return {
+                protocolVersion: protocolVersion,
+                capabilities: {
+                    tools: {}
+                },
+                serverInfo: {
+                    name: 'opengov-mcp-server',
+                    version: '0.1.1'
+                }
+            };
+        });
+    }
+    catch (e) {
+        console.log('[Server] Could not register initialize handler:', e);
+    }
+    // Handle ListTools
+    server.setRequestHandler(ListToolsRequestSchema, async (request) => {
+        console.log('[Server - ListTools] Request received');
         return {
             tools: [
                 {
                     name: UNIFIED_SOCRATA_TOOL.name,
                     description: UNIFIED_SOCRATA_TOOL.description,
-                    parameters: UNIFIED_SOCRATA_TOOL.parameters, // For SDK v1.11.5 spec
-                    inputSchema: UNIFIED_SOCRATA_TOOL.parameters, // For MCP Inspector v0.8.2 compatibility
+                    parameters: UNIFIED_SOCRATA_TOOL.parameters,
+                    inputSchema: UNIFIED_SOCRATA_TOOL.parameters,
                 },
             ],
         };
     });
-    // --- Handle CallTool --- 
-    baseServer.setRequestHandler(CallToolRequestSchema, async (request) => {
-        console.log('[Server - CallTool] Received CallTool request:', JSON.stringify(request, null, 2));
-        // The 'request' object here IS the full JSON-RPC request parsed according to CallToolRequestSchema.
-        // CallToolRequestSchema should define fields like: 
-        //   params: z.object({ name: z.string(), arguments: z.any() (or a more specific schema) })
-        //   id: z.union([z.string(), z.number()])
-        //   jsonrpc: z.literal('2.0')
-        //   method: z.literal('tools/call')
-        // We need to ensure our CallToolRequestSchema shim or the actual SDK type is correct.
-        // For now, let's assume request.params.name and request.params.arguments exist.
+    // Handle CallTool
+    server.setRequestHandler(CallToolRequestSchema, async (request) => {
+        console.log('[Server] CallTool request:', JSON.stringify(request, null, 2));
         if (!request.params || typeof request.params !== 'object') {
-            console.error('[Server - CallTool] Error: request.params is missing or not an object');
-            return {
-                jsonrpc: '2.0',
-                id: request.id,
-                error: { code: -32602, message: 'Invalid params: missing params object' },
-            };
+            throw new Error('Invalid params: missing params object');
         }
         const toolName = request.params.name;
-        const toolArgsFromRpc = request.params.arguments;
+        const toolArgs = request.params.arguments;
         if (toolName === UNIFIED_SOCRATA_TOOL.name) {
             try {
-                console.log(`[Server - CallTool] Calling tool: ${toolName} with args:`, JSON.stringify(toolArgsFromRpc, null, 2));
-                const parsedSocrataParams = socrataToolZodSchema.parse(toolArgsFromRpc);
-                console.log(`[Server - CallTool] Parsed Socrata params:`, JSON.stringify(parsedSocrataParams, null, 2));
-                if (!UNIFIED_SOCRATA_TOOL.handler) {
-                    throw new Error(`Handler not defined for tool: ${toolName}`);
+                console.log(`[Server] Calling tool: ${toolName} with args:`, JSON.stringify(toolArgs, null, 2));
+                const parsed = socrataToolZodSchema.parse(toolArgs);
+                console.log(`[Server] Parsed Socrata params:`, JSON.stringify(parsed, null, 2));
+                const handler = UNIFIED_SOCRATA_TOOL.handler;
+                if (typeof handler !== 'function') {
+                    throw new Error('Tool handler is not a function');
                 }
-                const toolResult = await UNIFIED_SOCRATA_TOOL.handler(parsedSocrataParams);
-                console.log(`[Server - CallTool] Tool ${toolName} executed. Original Result (type ${typeof toolResult}):`, JSON.stringify(toolResult, null, 2));
+                const result = await handler(parsed);
+                console.log('[Tool] Result:', JSON.stringify(result, null, 2));
                 let responseText;
-                if (toolResult === null || toolResult === undefined) {
-                    responseText = String(toolResult);
+                if (result === null || result === undefined) {
+                    responseText = String(result);
                 }
-                else if (typeof toolResult === 'string') {
-                    responseText = toolResult;
+                else if (typeof result === 'string') {
+                    responseText = result;
                 }
-                else if (typeof toolResult === 'number' || typeof toolResult === 'boolean') {
-                    responseText = toolResult.toString();
+                else if (typeof result === 'number' || typeof result === 'boolean') {
+                    responseText = result.toString();
                 }
                 else {
-                    try {
-                        responseText = JSON.stringify(toolResult, null, 2);
-                    }
-                    catch (stringifyError) {
-                        console.error('[Server - CallTool] Error stringifying toolResult:', stringifyError);
-                        responseText = `Error: Could not convert tool result to a displayable string. Original type: ${typeof toolResult}. Stringify error: ${stringifyError instanceof Error ? stringifyError.message : String(stringifyError)}`;
-                    }
+                    responseText = JSON.stringify(result, null, 2);
                 }
-                console.log(`[Server - CallTool] Sending result as text content.`);
                 return {
                     content: [{ type: 'text', text: responseText }],
                     isError: false
                 };
             }
             catch (error) {
-                console.error(`[Server - CallTool] Error executing tool ${toolName}:`, error);
-                const errorMessage = error instanceof Error ? error.message : String(error);
-                let errorCode = -32000; // Generic server error
+                console.error('[Tool] Error:', error);
                 if (error instanceof z.ZodError) {
-                    errorCode = -32602; // Invalid params
-                    console.error('[Server - CallTool] ZodError issues:', JSON.stringify(error.issues, null, 2));
+                    console.error('[Server] ZodError issues:', JSON.stringify(error.issues, null, 2));
                 }
-                // Construct the JSON-RPC error response (this is the 'error' object part)
-                // The Server class will wrap this into the full JSON-RPC error structure.
-                // However, setRequestHandler expects to return the *result* part or throw to indicate an error.
-                // Let's throw an error that the Server class can then format into a proper JSON-RPC error.
-                // Re-throwing the original error might be best if it contains useful info.
-                // Or, craft a specific error structure if Server expects that.
-                // For now, re-throw. The SDK examples for low-level server show throwing errors.
-                throw error; // The Server class should catch this and formulate a JSON-RPC error.
+                throw error;
             }
         }
         else {
-            console.warn(`[Server - CallTool] Unknown tool called: ${toolName}`);
-            // Throw an error for unknown tool, Server should format it.
             throw new Error(`Method not found: ${toolName}`);
         }
     });
-    console.log('[Server Factory] Low-level Server instance created and request handlers (ListTools, CallTool) registered.');
-    return baseServer;
-}
-function generateSessionId() {
-    return crypto.randomBytes(16).toString('hex');
+    console.log('[Server] Server instance created and request handlers registered.');
+    return server;
 }
 async function startApp() {
-    let mainTransportInstance = undefined;
-    // let singleMcpServer: McpServer | undefined = undefined; // Will be replaced
-    let lowLevelServer = undefined; // New server instance variable
-    const sseTransports = {};
+    let transport;
+    let server;
     try {
         const app = express();
-        // app.use(express.json()); // Removed as per instructions, no other JSON routes need it before /mcp
-        /* ── 1.  CORS comes first ─────────────────────────────── */
+        const port = Number(process.env.PORT) || 8000;
+        console.log('[Environment] DATA_PORTAL_URL:', process.env.DATA_PORTAL_URL);
+        // IMPORTANT: NO express.json() before /mcp route!
+        // CORS configuration
         app.use(cors({
             origin: true,
             credentials: true,
             exposedHeaders: ['mcp-session-id']
         }));
-        const mcpPath = '/mcp'; // Declare mcpPath before it is used by app.options
-        app.options(mcpPath, cors({ origin: true, credentials: true })); // Restore original OPTIONS handler
-        const ssePath = '/mcp-sse';
-        app.options(ssePath, cors({ origin: true, credentials: true }));
-        // TEMPORARY DIAGNOSTIC: More permissive OPTIONS handler for /mcp (NOW COMMENTED OUT/REVERTED)
-        // app.options(mcpPath, (req: Request, res: Response) => {
-        //   const origin = req.headers.origin || '*';
-        //   console.log(`[Express /mcp OPTIONS - DIAGNOSTIC] route hit from ${origin}. Responding with permissive headers.`);
-        //   res.header('Access-Control-Allow-Origin', origin); 
-        //   res.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-        //   res.header('Access-Control-Allow-Headers', 'Content-Type, mcp-session-id, Authorization, X-MCP-Client-Name, X-MCP-Client-Version');
-        //   res.header('Access-Control-Allow-Credentials', 'true');
-        //   res.header('Access-Control-Max-Age', '86400'); 
-        //   res.sendStatus(204); 
-        // });
-        const port = Number(process.env.PORT) || 8000;
-        // const mcpPath = '/mcp'; // This line was the duplicate/later declaration and is correctly removed
-        // Health check (remains)
-        app.get('/healthz', (_req, res) => {
-            console.log('[MCP Health] /healthz endpoint hit - v2');
-            res.sendStatus(200);
-        });
-        // --- Create Single Transport Instance (remains the same) --- 
-        console.log('[MCP Setup] Creating main transport instance...');
-        const mainTransportInstance = createSimpleHTTPServerTransport();
-        if ('onsessioninitialized' in mainTransportInstance) {
-            mainTransportInstance.onsessioninitialized = (sessionId) => {
-                console.log('[MCP Transport] Session initialized:', sessionId);
-            };
-        }
-        // Assign onmessage handler directly to the instance for inspection
-        mainTransportInstance.onmessage = (message, extra) => {
-            console.log('[MCP Transport - onmessage V2] Received message:', JSON.stringify(message, null, 2));
-            if (extra) {
-                console.log('[MCP Transport - onmessage V2] Extra info:', JSON.stringify(extra, null, 2));
-            }
-            // This is for inspection only. The McpServer has its own listeners.
-        };
-        // --- Create Single McpServer Instance (remains the same) --- 
-        console.log('[MCP Setup] Creating single Server instance (low-level)...');
-        // singleMcpServer = await createMcpServerInstance(); // Will be replaced
-        lowLevelServer = await createLowLevelServerInstance();
-        // --- Connect McpServer to Transport (ONCE - remains the same) --- 
-        console.log('[MCP Setup] Connecting single Server (low-level) to main transport...');
-        // await singleMcpServer.connect(mainTransportInstance); // Will be replaced
-        await lowLevelServer.connect(mainTransportInstance);
-        console.log('[MCP Setup] Server connected ✅');
-        mainTransportInstance.onerror = (error) => {
-            console.error('[MCP Transport - onerror] Transport-level error:', error);
-        };
-        mainTransportInstance.onclose = () => {
-            console.log('[MCP Transport - onclose] Main transport connection closed/terminated by transport itself.');
-        };
-        /* ── 2.  NO express.json() before /mcp!  ───────────────── */
-        // Accept-header shim for OpenAI connector
+        const mcpPath = '/mcp';
+        // Accept-header shim for OpenAI connector - CRITICAL!
         app.use(mcpPath, (req, _res, next) => {
             const h = req.headers.accept ?? '';
             if (!h.includes('text/event-stream')) {
@@ -203,87 +154,243 @@ async function startApp() {
             }
             next();
         });
-        app.all(mcpPath, (req, res) => {
-            // Earliest log for any /mcp request
-            console.log(`[Express /mcp ENTRY] Method: ${req.method}, URL: ${req.originalUrl}, Origin: ${req.headers.origin}`);
-            console.log(`[Express /mcp ${req.method}] route hit. Headers:`, JSON.stringify(req.headers, null, 2));
-            if (req.method === 'POST' && req.body) {
-                console.log('[Express /mcp POST] Parsed req.body (if any body-parser ran):', JSON.stringify(req.body, null, 2));
-            }
-            if (!mainTransportInstance) { // Keep this safety check
-                console.error('[Express Route /mcp] Main transport not initialized! This should not happen.');
-                if (!res.headersSent)
-                    res.status(503).send('MCP Service Unavailable');
-                return;
-            }
-            mainTransportInstance.handleRequest(req, res).catch(err => {
-                console.error('[transport]', err);
-                if (!res.headersSent)
-                    res.status(500).end();
+        // Health check
+        app.get('/healthz', (_req, res) => {
+            console.log('[Health] /healthz hit');
+            res.sendStatus(200);
+        });
+        // Root endpoint
+        app.get('/', (_req, res) => {
+            res.send('OpenGov MCP Server running');
+        });
+        // Debug endpoint to test server
+        app.get('/debug', async (_req, res) => {
+            console.log('[Debug] Testing server state...');
+            res.json({
+                server: 'running',
+                transport: !!transport,
+                serverConnected: !!server,
+                environment: {
+                    DATA_PORTAL_URL: process.env.DATA_PORTAL_URL
+                }
             });
         });
-        // Legacy SSE transport endpoint
-        app.all(ssePath, (req, res) => {
-            console.log(`[Express /mcp-sse ENTRY] Method: ${req.method}, URL: ${req.originalUrl}, Origin: ${req.headers.origin}`);
-            if (req.method === 'GET') {
-                const transport = new SSEServerTransport(ssePath, res);
-                sseTransports[transport.sessionId] = transport;
-                transport.onclose = () => {
-                    delete sseTransports[transport.sessionId];
-                };
-                console.log('[SSE ] session', transport.sessionId);
-                if (lowLevelServer) {
-                    lowLevelServer.connect(transport).catch(err => {
-                        console.error('[transport]', err);
-                        if (!res.headersSent)
-                            res.status(500).end();
-                    });
-                }
+        // Create transport
+        console.log('[MCP] Creating transport...');
+        transport = new OpenAICompatibleTransport({
+            sessionIdGenerator: () => {
+                const sessionId = crypto.randomBytes(16).toString('hex');
+                console.log('[Transport] sessionIdGenerator called! Generated:', sessionId);
+                return sessionId;
             }
-            else if (req.method === 'POST') {
-                const sessionId = req.query.sessionId;
-                const transport = sseTransports[sessionId];
-                if (!transport) {
-                    if (!res.headersSent)
-                        res.status(400).send('No transport found for sessionId');
-                    return;
-                }
-                transport.handlePostMessage(req, res, req.body).catch(err => {
-                    console.error('[transport]', err);
-                    if (!res.headersSent)
-                        res.status(500).end();
+        });
+        console.log('[MCP] Transport created, checking properties...');
+        console.log('[MCP] Transport prototype:', Object.getOwnPropertyNames(Object.getPrototypeOf(transport)));
+        console.log('[MCP] Transport instance properties:', Object.getOwnPropertyNames(transport));
+        // Log transport events if available
+        if ('onsessioninitialized' in transport) {
+            transport.onsessioninitialized = (sessionId) => {
+                console.log('[Transport] onsessioninitialized fired! Session:', sessionId);
+            };
+        }
+        else {
+            console.log('[Transport] WARNING: onsessioninitialized not found on transport');
+        }
+        transport.onmessage = (message, extra) => {
+            console.log('[Transport] onmessage fired!', JSON.stringify(message, null, 2));
+            if (extra) {
+                console.log('[Transport] onmessage extra:', JSON.stringify(extra, null, 2));
+            }
+        };
+        transport.onerror = (error) => {
+            console.error('[Transport] onerror fired! Error:', error);
+        };
+        transport.onclose = () => {
+            console.log('[Transport] onclose fired!');
+        };
+        // Wrap handleRequest to see what's happening
+        const originalHandleRequest = transport.handleRequest.bind(transport);
+        transport.handleRequest = async (req, res) => {
+            console.log('[Transport.handleRequest] Called');
+            console.log('[Transport.handleRequest] Method:', req.method);
+            console.log('[Transport.handleRequest] URL:', req.url);
+            console.log('[Transport.handleRequest] Transport internal state:', {
+                hasServer: !!transport._server,
+                hasSession: !!transport._session,
+                serverInfo: transport._server ? {
+                    name: transport._server.name,
+                    connected: true
+                } : null
+            });
+            try {
+                const result = await originalHandleRequest(req, res);
+                console.log('[Transport.handleRequest] Completed, result:', result);
+                return result;
+            }
+            catch (error) {
+                console.error('[Transport.handleRequest] Error:', error);
+                throw error;
+            }
+        };
+        // Note: Transport will be started automatically when server.connect() is called
+        console.log('[MCP] Transport ready for connection');
+        // Create server
+        server = await createServer();
+        // Connect server to transport
+        console.log('[MCP] Connecting server to transport...');
+        // Check transport state before connection
+        console.log('[MCP] Transport state before connection:', {
+            hasServer: !!transport._server,
+            hasHandleRequest: !!transport.handleRequest,
+            transportType: transport.constructor.name
+        });
+        // Add extra logging to ensure connection works
+        const originalConnect = server.connect.bind(server);
+        server.connect = async (transport) => {
+            console.log('[Server.connect] Connecting...');
+            const result = await originalConnect(transport);
+            console.log('[Server.connect] Connected!');
+            return result;
+        };
+        await server.connect(transport);
+        console.log('[MCP] Server connected');
+        // Check transport state after connection
+        console.log('[MCP] Transport state after connection:', {
+            hasServer: !!transport._server,
+            serverName: transport._server?.name,
+            isConnected: !!transport._session
+        });
+        // Verify the connection
+        console.log('[MCP] Transport has session handlers:', {
+            onmessage: !!transport.onmessage,
+            onerror: !!transport.onerror,
+            onclose: !!transport.onclose,
+            onsessioninitialized: !!transport.onsessioninitialized
+        });
+        // MCP endpoint
+        app.all(mcpPath, async (req, res) => {
+            console.log(`[Express] ${req.method} ${req.url}`);
+            console.log('[Express] Headers:', {
+                'accept': req.headers.accept,
+                'content-type': req.headers['content-type'],
+                'mcp-session-id': req.headers['mcp-session-id'],
+                'x-session-id': req.headers['x-session-id']
+            });
+            // For POST requests, check if body is readable
+            if (req.method === 'POST') {
+                console.log('[Express] Request readable:', req.readable);
+                console.log('[Express] Request readableEnded:', req.readableEnded);
+                // Check if this is an initialize request by peeking at the body
+                let body = '';
+                req.on('data', (chunk) => {
+                    body += chunk.toString();
+                });
+                req.on('end', () => {
+                    if (body) {
+                        console.log('[Express] Request body:', body);
+                        // Check if this is an initialize request without a session ID
+                        try {
+                            const parsed = JSON.parse(body);
+                            if (parsed.method === 'initialize' && !req.headers['mcp-session-id']) {
+                                console.log('[Express] Initialize request without session ID detected - this is expected for first request');
+                            }
+                        }
+                        catch (e) {
+                            // Ignore parse errors
+                        }
+                    }
                 });
             }
-            else {
-                if (!res.headersSent)
-                    res.status(405).end();
+            if (!transport) {
+                console.error('[Express] Transport not initialized!');
+                res.status(503).send('Service Unavailable');
+                return;
+            }
+            // Log response events
+            const originalEnd = res.end;
+            const originalWrite = res.write;
+            const originalSetHeader = res.setHeader;
+            const originalJson = res.json;
+            res.setHeader = function (name, value) {
+                console.log(`[Express] Response.setHeader: ${name} = ${value}`);
+                return originalSetHeader.call(this, name, value);
+            };
+            res.json = function (data) {
+                console.log('[Express] Response.json:', JSON.stringify(data, null, 2));
+                // If this is an initialize response, ensure we're sending the session ID
+                if (data && data.result && !data.error) {
+                    const sessionId = res.getHeader('mcp-session-id');
+                    if (sessionId) {
+                        console.log('[Express] Initialize response includes session ID in header:', sessionId);
+                    }
+                }
+                return originalJson.call(this, data);
+            };
+            res.write = function (chunk, encoding, callback) {
+                console.log('[Express] Response.write called, data length:', chunk ? chunk.length : 0);
+                if (chunk && chunk.length < 500) {
+                    console.log('[Express] Response.write data:', chunk.toString());
+                }
+                if (typeof encoding === 'function') {
+                    callback = encoding;
+                    encoding = undefined;
+                }
+                return originalWrite.call(this, chunk, encoding, callback);
+            };
+            res.end = function (chunk, encoding, callback) {
+                console.log('[Express] Response.end called');
+                if (chunk) {
+                    const preview = typeof chunk === 'string' ? chunk.substring(0, 500) :
+                        Buffer.isBuffer(chunk) ? chunk.toString().substring(0, 500) :
+                            'non-string data';
+                    console.log('[Express] Response.end data:', preview);
+                }
+                if (typeof chunk === 'function') {
+                    callback = chunk;
+                    chunk = undefined;
+                    encoding = undefined;
+                }
+                else if (typeof encoding === 'function') {
+                    callback = encoding;
+                    encoding = undefined;
+                }
+                return originalEnd.call(this, chunk, encoding, callback);
+            };
+            try {
+                console.log('[Express] Calling transport.handleRequest...');
+                await transport.handleRequest(req, res);
+                console.log('[Express] transport.handleRequest returned');
+                console.log('[Express] Response headersSent:', res.headersSent);
+                console.log('[Express] Response finished:', res.finished);
+            }
+            catch (error) {
+                console.error('[Express] Error handling request:', error);
+                if (!res.headersSent) {
+                    res.status(500).json({ error: 'Internal server error' });
+                }
             }
         });
-        /* ── 3.  Body-parser for everything ELSE ───────────────── */
-        // app.use(express.json()); // Not needed as no other routes require it
-        app.get('/', (req, res) => {
-            res.status(200).send('OpenGov MCP Server is running. MCP endpoint at /mcp.');
-        });
+        // Start server
         const httpServer = app.listen(port, '0.0.0.0', () => {
-            console.log(`🚀 MCP server (Single McpServer + Single Transport) listening on port ${port}. MCP endpoint at ${mcpPath}, Health at /healthz`);
+            console.log(`🚀 Server running on port ${port}`);
+            console.log(`   Health: http://localhost:${port}/healthz`);
+            console.log(`   MCP: http://localhost:${port}/mcp`);
+            console.log(`   Debug: http://localhost:${port}/debug`);
+            console.log('[Startup] Transport ready:', !!transport);
+            console.log('[Startup] Server ready:', !!server);
         });
+        // Graceful shutdown
         const gracefulShutdown = async (signal) => {
             console.log(`${signal} signal received: closing resources.`);
-            // if (singleMcpServer) { // Will be replaced
-            //   console.log('Closing McpServer...');
-            //   await singleMcpServer.close().catch(e => console.error('Error closing McpServer:', e));
-            // }
-            if (lowLevelServer) {
-                console.log('Closing low-level Server...');
-                // The low-level Server might have a different close method or rely on transport.close()
-                // For now, let's assume it has a close method similar to McpServer.
-                // SDK docs for `Server` don't explicitly list .close(), it might be on the transport or implicit.
-                // McpServer had .close(). The base `Server` might not. It connects to transport, transport closes.
-                // We'll rely on transport.close() for now, and McpServer was likely wrapping that.
+            if (server) {
+                console.log('Closing server...');
+                if ('close' in server && typeof server.close === 'function') {
+                    await server.close().catch((e) => console.error('Error closing server:', e));
+                }
             }
-            if (mainTransportInstance) {
-                console.log('Closing main transport...');
-                await mainTransportInstance.stop().catch(e => console.error('Error closing main transport:', e));
+            if (transport) {
+                console.log('Closing transport...');
+                await transport.close().catch((e) => console.error('Error closing transport:', e));
             }
             httpServer.close(() => {
                 console.log('HTTP server closed.');
@@ -293,20 +400,19 @@ async function startApp() {
         process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
         process.on('SIGINT', () => gracefulShutdown('SIGINT'));
     }
-    catch (err) {
-        console.error('Fatal error during application startup:', err);
-        // if (singleMcpServer) { // Will be replaced
-        //   await singleMcpServer.close().catch(e => console.error('Error closing McpServer during fatal startup error:', e));
-        // }
-        // No specific close for lowLevelServer here yet, transport handles it.
-        if (mainTransportInstance) {
-            await mainTransportInstance.stop().catch(e => console.error('Error closing main transport during fatal startup error:', e));
+    catch (error) {
+        console.error('[Fatal] Error during startup:', error);
+        if (transport) {
+            await transport.close().catch((e) => console.error('Error closing transport during fatal error:', e));
+        }
+        if (server) {
+            // Server might not have a close method, but we can try
+            if ('close' in server && typeof server.close === 'function') {
+                await server.close().catch((e) => console.error('Error closing server during fatal error:', e));
+            }
         }
         process.exit(1);
     }
 }
-startApp().catch(async (err) => {
-    console.error('[Fatal] Uncaught error during startup process wrapper:', err);
-    process.exit(1);
-});
+startApp().catch(console.error);
 //# sourceMappingURL=index.js.map

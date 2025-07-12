@@ -2,6 +2,7 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { OpenAICompatibleTransport } from './openai-compatible-transport.js';
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
@@ -151,7 +152,7 @@ async function createServer(): Promise<Server> {
 }
 
 async function startApp() {
-  let transport: StreamableHTTPServerTransport | undefined;
+  let transport: OpenAICompatibleTransport | undefined;
   let server: Server | undefined;
   
   try {
@@ -206,7 +207,7 @@ async function startApp() {
 
     // Create transport
     console.log('[MCP] Creating transport...');
-    transport = new StreamableHTTPServerTransport({
+    transport = new OpenAICompatibleTransport({
       sessionIdGenerator: () => {
         const sessionId = crypto.randomBytes(16).toString('hex');
         console.log('[Transport] sessionIdGenerator called! Generated:', sessionId);
@@ -267,18 +268,8 @@ async function startApp() {
       }
     };
     
-    // Check if transport needs to be started
-    if ('start' in transport && typeof transport.start === 'function') {
-      console.log('[MCP] Starting transport...');
-      try {
-        await transport.start();
-        console.log('[MCP] Transport started');
-      } catch (error) {
-        console.error('[MCP] Error starting transport:', error);
-      }
-    } else {
-      console.log('[MCP] Transport does not have a start method');
-    }
+    // Note: Transport will be started automatically when server.connect() is called
+    console.log('[MCP] Transport ready for connection');
 
     // Create server
     server = await createServer();

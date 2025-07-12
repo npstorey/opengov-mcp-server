@@ -33,3 +33,9 @@ yarn-error.log*
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Documentation (downloaded from external sources)
+docs/
+
+# Claude project primer
+CLAUDE.md

@@ -87,5 +87,5 @@ export declare const handleDatasetMetadataTool: typeof handleDatasetMetadata;
 export declare const handleColumnInfoTool: typeof handleColumnInfo;
 export declare const handleDataAccessTool: typeof handleDataAccess;
 export declare const handleSiteMetricsTool: typeof handleSiteMetrics;
-export declare const SOCRATA_TOOLS: Tool[];
+export declare const SOCRATA_TOOLS: any[];
 export {};

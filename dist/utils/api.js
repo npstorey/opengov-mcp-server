@@ -1,10 +1,6 @@
 import axios from 'axios'; // Import AxiosError for type checking
 // Get configured data portal URL from environment
 const DATA_PORTAL_URL = process.env.DATA_PORTAL_URL;
-if (!DATA_PORTAL_URL) {
-    console.error('ERROR: DATA_PORTAL_URL environment variable must be set');
-    process.exit(1); // Ensure process.exit is recognized
-}
 const DEFAULT_BASE_URL = DATA_PORTAL_URL;
 /**
  * Helper function to make API requests to Socrata endpoints
