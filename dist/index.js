@@ -306,7 +306,9 @@ async function startApp() {
                 } : null
             });
             try {
-                const result = await originalHandleRequest(req, res);
+                // The SDK's handleRequest actually accepts a third parameter for parsed body
+                const body = req.body;
+                const result = await originalHandleRequest(req, res, body);
                 console.log('[Transport.handleRequest] Completed, result:', result);
                 return result;
             }
@@ -372,6 +374,7 @@ async function startApp() {
             }
             // Track current request body for response interceptors
             let currentRequestBody = null;
+            let protocolVersion = undefined;
             // For POST requests, log parsed body (now available via Express body parser)
             if (req.method === 'POST' && req.body) {
                 console.log('[Express] Request body:', req.body);
@@ -379,8 +382,15 @@ async function startApp() {
                 // Check if this is an initialize request without a session ID
                 try {
                     const parsed = JSON.parse(req.body);
-                    if (parsed.method === 'initialize' && !req.headers['mcp-session-id']) {
-                        console.log('[Express] Initialize request without session ID detected - this is expected for first request');
+                    if (parsed.method === 'initialize') {
+                        protocolVersion = parsed.params?.protocolVersion;
+                        console.log('[Express] Initialize request detected:');
+                        console.log('  - Protocol version:', protocolVersion);
+                        console.log('  - Has session ID:', !!req.headers['mcp-session-id']);
+                        console.log('  - Client:', parsed.params?.clientInfo?.name);
+                        if (!req.headers['mcp-session-id']) {
+                            console.log('[Express] Initialize request without session ID detected - this is expected for first request');
+                        }
                     }
                 }
                 catch (e) {
@@ -485,12 +495,7 @@ async function startApp() {
                             'non-string data';
                     console.log('[Express] Response.end data:', preview);
                 }
-                // Emit roots update if this was an initialize response
-                if (isInitializeResponse && res.getHeader('Content-Type') === 'text/event-stream') {
-                    const rootsEvent = '\n\nevent: message\ndata: {"roots":{"listChanged":true}}\n\n';
-                    originalWrite.call(this, rootsEvent, 'utf8');
-                    console.log('[Express] Emitted roots.listChanged SSE event after initialize');
-                }
+                // Removed extra roots.listChanged event - not part of MCP spec and causes issues with OpenAI
                 if (typeof chunk === 'function') {
                     callback = chunk;
                     chunk = undefined;
