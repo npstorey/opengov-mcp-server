@@ -104,22 +104,31 @@ async function createServer(): Promise<Server> {
       {
         name: 'search',
         description: SEARCH_TOOL.description,
-        parameters: SEARCH_TOOL.parameters
+        parameters: { ...SEARCH_TOOL.parameters }
       },
       {
         name: 'document_retrieval',
         description: DOCUMENT_RETRIEVAL_TOOL.description,
-        parameters: DOCUMENT_RETRIEVAL_TOOL.parameters
+        parameters: { ...DOCUMENT_RETRIEVAL_TOOL.parameters }
       }
-    ];
+    ].map(tool => {
+      // Remove empty required arrays to satisfy OpenAI wizard validation
+      if (tool.parameters.required && Array.isArray(tool.parameters.required) && tool.parameters.required.length === 0) {
+        const { required, ...rest } = tool.parameters;
+        tool.parameters = rest;
+      }
+      return tool;
+    });
     
-    // Validate tool sizes to ensure they don't exceed 2KB limit
-    for (const tool of tools) {
-      const size = Buffer.byteLength(JSON.stringify(tool), 'utf8');
-      if (size > 2048) {
-        console.error(`[Server - ListTools] WARNING: Tool ${tool.name} exceeds 2KB limit: ${size} bytes`);
-      } else {
-        console.log(`[Server - ListTools] Tool ${tool.name} size: ${size} bytes (OK)`);
+    // Validate tool sizes only in debug mode
+    if (process.env.DEBUG) {
+      for (const tool of tools) {
+        const size = Buffer.byteLength(JSON.stringify(tool), 'utf8');
+        if (size > 2048) {
+          console.error(`[Server - ListTools] WARNING: Tool ${tool.name} exceeds 2KB limit: ${size} bytes`);
+        } else {
+          console.log(`[Server - ListTools] Tool ${tool.name} size: ${size} bytes (OK)`);
+        }
       }
     }
     

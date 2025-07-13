@@ -402,8 +402,7 @@ const searchJsonParameters: any = {
       minimum: 0,
       description: 'Offset for pagination'
     }
-  },
-  required: []
+  }
 };
 
 const documentRetrievalJsonParameters: any = {
