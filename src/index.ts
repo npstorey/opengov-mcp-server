@@ -413,13 +413,27 @@ async function startApp() {
 
     // MCP endpoint
     app.all(mcpPath, async (req, res) => {
+      // Track request timing
+      const requestStartTime = Date.now();
+      
       console.log(`[Express] ${req.method} ${req.url}`);
+      console.log('[Express] Request timestamp:', new Date().toISOString());
       console.log('[Express] Headers:', {
         'accept': req.headers.accept,
         'content-type': req.headers['content-type'],
         'mcp-session-id': req.headers['mcp-session-id'],
-        'x-session-id': req.headers['x-session-id']
+        'mcp-protocol-version': req.headers['mcp-protocol-version'],
+        'x-session-id': req.headers['x-session-id'],
+        'user-agent': req.headers['user-agent']
       });
+      
+      // Log all MCP-related headers
+      const mcpHeaders = Object.entries(req.headers)
+        .filter(([key]) => key.toLowerCase().startsWith('mcp-'))
+        .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {});
+      if (Object.keys(mcpHeaders).length > 0) {
+        console.log('[Express] All MCP headers:', mcpHeaders);
+      }
       
       // Track current request body for response interceptors
       let currentRequestBody: any = null;
@@ -476,21 +490,62 @@ async function startApp() {
       
       res.write = function(chunk: any, encoding?: any, callback?: any) {
         console.log('[Express] Response.write called, data length:', chunk ? chunk.length : 0);
-        if (chunk && chunk.length < 500) {
-          console.log('[Express] Response.write data:', chunk.toString());
-        }
         
-        // Detect initialize response
-        if (chunk && currentRequestBody) {
+        // Enhanced logging with response metadata
+        console.log('[Express] Response metadata:', {
+          timestamp: new Date().toISOString(),
+          sessionId: res.getHeader('mcp-session-id'),
+          contentType: res.getHeader('Content-Type'),
+          method: currentRequestBody ? (typeof currentRequestBody === 'string' ? JSON.parse(currentRequestBody).method : currentRequestBody.method) : 'unknown'
+        });
+        
+        if (chunk) {
           const chunkStr = chunk.toString();
-          try {
-            const parsed = JSON.parse(currentRequestBody);
-            if (parsed.method === 'initialize' && chunkStr.includes('"result":') && chunkStr.includes('"protocolVersion":')) {
-              isInitializeResponse = true;
-              console.log('[Express] Detected initialize response');
+          
+          // Log raw data with increased limit (2000 bytes)
+          if (chunk.length < 2000) {
+            console.log('[Express] Response.write data:', chunkStr);
+          } else {
+            console.log('[Express] Response.write data (truncated):', chunkStr.substring(0, 2000) + '... [TRUNCATED]');
+          }
+          
+          // Parse SSE data for structured logging
+          if (chunkStr.includes('event:') && chunkStr.includes('data:')) {
+            try {
+              const dataMatch = chunkStr.match(/data:\s*(.+?)(?:\n\n|$)/s);
+              if (dataMatch) {
+                const jsonData = JSON.parse(dataMatch[1]);
+                console.log('[Express] SSE JSON payload:', JSON.stringify(jsonData, null, 2));
+                
+                // Log specific information based on response type
+                if (jsonData.result && jsonData.result.tools) {
+                  console.log('[Express] Tools count:', jsonData.result.tools.length);
+                  jsonData.result.tools.forEach((tool: any, index: number) => {
+                    console.log(`[Express] Tool[${index}]:`, {
+                      name: tool.name,
+                      hasInputSchema: !!tool.inputSchema,
+                      hasRequired: !!(tool.inputSchema && tool.inputSchema.required),
+                      requiredCount: tool.inputSchema?.required?.length || 0
+                    });
+                  });
+                }
+              }
+            } catch (e) {
+              console.log('[Express] Failed to parse SSE JSON:', e instanceof Error ? e.message : String(e));
             }
-          } catch (e) {
-            // Ignore parse errors
+          }
+          
+          // Detect initialize response
+          if (currentRequestBody) {
+            try {
+              const parsed = JSON.parse(currentRequestBody);
+              if (parsed.method === 'initialize' && chunkStr.includes('"result":') && chunkStr.includes('"protocolVersion":')) {
+                isInitializeResponse = true;
+                console.log('[Express] Detected initialize response');
+              }
+            } catch (e) {
+              // Ignore parse errors
+            }
           }
         }
         
@@ -534,11 +589,19 @@ async function startApp() {
         console.log('[Express] transport.handleRequest returned');
         console.log('[Express] Response headersSent:', res.headersSent);
         console.log('[Express] Response finished:', res.finished);
+        
+        // Log request completion timing
+        const requestDuration = Date.now() - requestStartTime;
+        console.log('[Express] Request completed in', requestDuration, 'ms');
       } catch (error) {
         console.error('[Express] Error handling request:', error);
         if (!res.headersSent) {
           res.status(500).json({ error: 'Internal server error' });
         }
+        
+        // Log error timing
+        const requestDuration = Date.now() - requestStartTime;
+        console.log('[Express] Request failed after', requestDuration, 'ms');
       }
     });
 
