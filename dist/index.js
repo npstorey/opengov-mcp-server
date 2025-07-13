@@ -16,7 +16,7 @@ const ListPromptsRequestSchema = z.object({
     }))
 });
 dotenv.config();
-async function createServer() {
+async function createServer(transport) {
     console.log('[Server] Creating Server instance...');
     const server = new Server({ name: 'opengov-mcp-server', version: '0.1.1' }, {
         capabilities: {
@@ -27,6 +27,10 @@ async function createServer() {
         },
         authMethods: []
     });
+    // Store transport reference on server for initialize handler
+    if (transport) {
+        server._customTransport = transport;
+    }
     // Wrap setRequestHandler to log all registrations and calls
     const originalSetRequestHandler = server.setRequestHandler.bind(server);
     server.setRequestHandler = function (schema, handler) {
@@ -57,7 +61,28 @@ async function createServer() {
         server.setRequestHandler(InitializeRequestSchema, async (request) => {
             console.log('[Server - Initialize] Request received:', JSON.stringify(request, null, 2));
             const protocolVersion = request.params.protocolVersion || '2025-01-01';
-            return {
+            // Try to get session ID from the custom transport
+            let sessionId;
+            if (server._customTransport) {
+                // The transport should have the sessionId available after initialization
+                const transport = server._customTransport;
+                console.log('[Server - Initialize] Checking transport for session ID');
+                // Check if the transport has a sessionId property
+                if (transport.sessionId) {
+                    sessionId = transport.sessionId;
+                    console.log('[Server - Initialize] Found sessionId on transport:', sessionId);
+                }
+                else if (transport._sessionId) {
+                    sessionId = transport._sessionId;
+                    console.log('[Server - Initialize] Found _sessionId on transport:', sessionId);
+                }
+                else {
+                    // Try to access the SDK's internal session management
+                    console.log('[Server - Initialize] Transport properties:', Object.getOwnPropertyNames(transport));
+                    console.log('[Server - Initialize] Transport prototype:', Object.getOwnPropertyNames(Object.getPrototypeOf(transport)));
+                }
+            }
+            const response = {
                 protocolVersion: protocolVersion,
                 capabilities: {
                     tools: {
@@ -77,6 +102,15 @@ async function createServer() {
                     version: '0.1.5'
                 }
             };
+            // Add sessionId to response if we have it
+            if (sessionId) {
+                console.log('[Server - Initialize] Adding sessionId to response body:', sessionId);
+                response.sessionId = sessionId;
+            }
+            else {
+                console.log('[Server - Initialize] No sessionId available to add to response body');
+            }
+            return response;
         });
     }
     catch (e) {
@@ -286,6 +320,10 @@ async function startApp() {
             // Pass callbacks in constructor options
             onsessioninitialized: (sessionId) => {
                 console.log('[Transport] onsessioninitialized fired! Session:', sessionId);
+                // Force initialize handler to re-check for session ID
+                if (transport) {
+                    console.log('[Transport] Session ID now available on transport.sessionId:', transport.sessionId);
+                }
             },
             onsessionclosed: (sessionId) => {
                 console.log('[Transport] onsessionclosed fired! Session:', sessionId);
@@ -334,8 +372,8 @@ async function startApp() {
         };
         // Note: Transport will be started automatically when server.connect() is called
         console.log('[MCP] Transport ready for connection');
-        // Create server
-        server = await createServer();
+        // Create server (passing transport so initialize handler can access session ID)
+        server = await createServer(transport);
         // Connect server to transport
         console.log('[MCP] Connecting server to transport...');
         // Check transport state before connection
@@ -426,6 +464,31 @@ async function startApp() {
             let isInitializeResponse = false;
             res.setHeader = function (name, value) {
                 console.log(`[Express] Response.setHeader: ${name} = ${value}`);
+                // If setting up SSE, add keep-alive
+                if (name.toLowerCase() === 'content-type' && value === 'text/event-stream') {
+                    console.log('[Express] SSE stream detected, setting up keep-alive');
+                    // Send a comment every 30 seconds to keep the connection alive
+                    const keepAliveInterval = setInterval(() => {
+                        try {
+                            res.write(': keep-alive\n\n');
+                            console.log('[Express] Sent SSE keep-alive comment');
+                        }
+                        catch (err) {
+                            console.error('[Express] Failed to send keep-alive:', err);
+                            clearInterval(keepAliveInterval);
+                        }
+                    }, 30000);
+                    // Clean up interval when response ends
+                    const cleanup = () => {
+                        if (keepAliveInterval) {
+                            clearInterval(keepAliveInterval);
+                            console.log('[Express] Cleaned up SSE keep-alive interval');
+                        }
+                    };
+                    res.on('close', cleanup);
+                    res.on('finish', cleanup);
+                    res.on('error', cleanup);
+                }
                 return originalSetHeader.call(this, name, value);
             };
             res.json = function (data) {

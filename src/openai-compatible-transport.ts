@@ -5,6 +5,7 @@ import crypto from 'crypto';
 export class OpenAICompatibleTransport extends StreamableHTTPServerTransport {
   private sessionStore: Map<string, { createdAt: Date; initialized: boolean }> = new Map();
   private connectionSessions: Map<string, string> = new Map(); // connection ID -> session ID
+  private currentSessionId: string | undefined; // Store the current session ID for access by server
 
   constructor(options?: any) {
     // Store reference to track current request context
@@ -19,6 +20,9 @@ export class OpenAICompatibleTransport extends StreamableHTTPServerTransport {
       onsessioninitialized: (sessionId: string) => {
         console.log('[OpenAICompatibleTransport] Session initialized by SDK:', sessionId);
         this.sessionStore.set(sessionId, { createdAt: new Date(), initialized: true });
+        
+        // Store the current session ID for access by the server
+        this.currentSessionId = sessionId;
         
         // Map the connection to this session
         if (currentRequest) {
@@ -55,6 +59,11 @@ export class OpenAICompatibleTransport extends StreamableHTTPServerTransport {
     (this as any).setCurrentRequest = (req: Request) => {
       currentRequest = req;
     };
+  }
+
+  // Public getter for the current session ID
+  get sessionId(): string | undefined {
+    return this.currentSessionId;
   }
 
   private getConnectionId(req: Request): string {
