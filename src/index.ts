@@ -92,17 +92,20 @@ async function createServer(transport?: OpenAICompatibleTransport): Promise<Serv
         const transport = (server as any)._customTransport;
         console.log('[Server - Initialize] Checking transport for session ID');
         
-        // Check if the transport has a sessionId property
-        if (transport.sessionId) {
-          sessionId = transport.sessionId;
+        // The SDK's StreamableHTTPServerTransport will have sessionId property after initialization
+        if ((transport as any).sessionId) {
+          sessionId = (transport as any).sessionId;
           console.log('[Server - Initialize] Found sessionId on transport:', sessionId);
-        } else if ((transport as any)._sessionId) {
-          sessionId = (transport as any)._sessionId;
-          console.log('[Server - Initialize] Found _sessionId on transport:', sessionId);
         } else {
-          // Try to access the SDK's internal session management
+          // Log available properties for debugging
           console.log('[Server - Initialize] Transport properties:', Object.getOwnPropertyNames(transport));
           console.log('[Server - Initialize] Transport prototype:', Object.getOwnPropertyNames(Object.getPrototypeOf(transport)));
+          
+          // Check parent class properties
+          const parentProto = Object.getPrototypeOf(Object.getPrototypeOf(transport));
+          if (parentProto) {
+            console.log('[Server - Initialize] Parent prototype properties:', Object.getOwnPropertyNames(parentProto));
+          }
         }
       }
       
@@ -374,9 +377,9 @@ async function startApp() {
       // Pass callbacks in constructor options
       onsessioninitialized: (sessionId: string) => {
         console.log('[Transport] onsessioninitialized fired! Session:', sessionId);
-        // Force initialize handler to re-check for session ID
+        // The SDK should now have set the sessionId property on the transport
         if (transport) {
-          console.log('[Transport] Session ID now available on transport.sessionId:', transport.sessionId);
+          console.log('[Transport] Session ID now available on transport:', (transport as any).sessionId);
         }
       },
       onsessionclosed: (sessionId: string) => {
