@@ -299,7 +299,6 @@ export const UNIFIED_SOCRATA_TOOL = {
     name: 'get_data',
     description: 'A unified tool to interact with Socrata open-data portals.',
     parameters: jsonParameters,
-    inputSchema: jsonParameters, // Add this line
     // Assert the handler type to satisfy the generic Tool.handler signature.
     // The actual call from src/index.ts will provide the correctly typed SocrataToolParams.
     handler: handleSocrataTool
@@ -309,7 +308,6 @@ export const SEARCH_TOOL = {
     name: 'search',
     description: 'Search Socrata datasets and return matching document IDs with relevance scores.',
     parameters: searchJsonParameters,
-    inputSchema: searchJsonParameters,
     handler: handleSearchTool
 };
 // New document retrieval tool
@@ -317,7 +315,6 @@ export const DOCUMENT_RETRIEVAL_TOOL = {
     name: 'document_retrieval',
     description: 'Retrieve full document content from Socrata datasets by document IDs.',
     parameters: documentRetrievalJsonParameters,
-    inputSchema: documentRetrievalJsonParameters,
     handler: handleDocumentRetrievalTool
 };
 // Main handler function that dispatches to specific handlers based on type

@@ -62,12 +62,11 @@ async function createServer() {
                 capabilities: {
                     tools: {
                         supported: true
-                    },
-                    types: ['search', 'document_retrieval']
+                    }
                 },
                 serverInfo: {
                     name: 'opengov-mcp-server',
-                    version: '0.1.1'
+                    version: '0.1.2'
                 }
             };
         });

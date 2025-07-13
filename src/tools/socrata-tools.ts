@@ -432,7 +432,6 @@ export const UNIFIED_SOCRATA_TOOL: Tool = {
   name: 'get_data',
   description: 'A unified tool to interact with Socrata open-data portals.',
   parameters: jsonParameters,
-  inputSchema: jsonParameters, // Add this line
   // Assert the handler type to satisfy the generic Tool.handler signature.
   // The actual call from src/index.ts will provide the correctly typed SocrataToolParams.
   handler: handleSocrataTool as (params: Record<string, unknown>) => Promise<unknown>
@@ -443,7 +442,6 @@ export const SEARCH_TOOL: Tool = {
   name: 'search',
   description: 'Search Socrata datasets and return matching document IDs with relevance scores.',
   parameters: searchJsonParameters,
-  inputSchema: searchJsonParameters,
   handler: handleSearchTool as (params: Record<string, unknown>) => Promise<unknown>
 };
 
@@ -452,7 +450,6 @@ export const DOCUMENT_RETRIEVAL_TOOL: Tool = {
   name: 'document_retrieval',
   description: 'Retrieve full document content from Socrata datasets by document IDs.',
   parameters: documentRetrievalJsonParameters,
-  inputSchema: documentRetrievalJsonParameters,
   handler: handleDocumentRetrievalTool as (params: Record<string, unknown>) => Promise<unknown>
 };
 
