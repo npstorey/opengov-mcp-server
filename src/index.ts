@@ -87,7 +87,7 @@ async function createServer(): Promise<Server> {
         },
         serverInfo: {
           name: 'opengov-mcp-server',
-          version: '0.1.3'
+          version: '0.1.4'
         }
       };
     });

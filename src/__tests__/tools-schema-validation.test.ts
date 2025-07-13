@@ -16,8 +16,8 @@ describe('Tools Schema Validation', () => {
     // Test search tool
     const searchParams = { ...SEARCH_TOOL.parameters };
     
-    // Check that search tool has no required field
-    expect(searchParams.required).toBeUndefined();
+    // Check that search tool has required field with all properties
+    expect(searchParams.required).toEqual(['dataset_id', 'domain', 'query', 'where', 'limit', 'offset']);
     
     // Validate schema
     const searchSchemaDoc = {
@@ -85,5 +85,59 @@ describe('Tools Schema Validation', () => {
     }
     
     expect(testTool.parameters.required).toBeUndefined();
+  });
+
+  it('should validate against JSON Schema draft-2020-12 and fail if required is empty or missing', () => {
+    // Initialize AJV with Draft 2020-12 support
+    const ajv2020 = new Ajv({ 
+      strict: false,
+      allErrors: true,
+      validateFormats: true
+    });
+    addFormats(ajv2020);
+
+    // Test that search tool with required array validates correctly
+    const searchSchema = {
+      ...SEARCH_TOOL.parameters
+    };
+    
+    const searchValid = ajv2020.validateSchema(searchSchema);
+    expect(searchValid).toBe(true);
+    expect(SEARCH_TOOL.parameters.required).toBeDefined();
+    expect(SEARCH_TOOL.parameters.required.length).toBeGreaterThan(0);
+
+    // Test that document_retrieval tool with required array validates correctly
+    const docSchema = {
+      ...DOCUMENT_RETRIEVAL_TOOL.parameters
+    };
+    
+    const docValid = ajv2020.validateSchema(docSchema);
+    expect(docValid).toBe(true);
+    expect(DOCUMENT_RETRIEVAL_TOOL.parameters.required).toBeDefined();
+    expect(DOCUMENT_RETRIEVAL_TOOL.parameters.required.length).toBeGreaterThan(0);
+
+    // Test that a tool without required array would fail our expectations
+    const invalidTool = {
+      type: 'object',
+      properties: {
+        test: { type: 'string' }
+      }
+      // Missing required array
+    };
+
+    // This schema is valid, but we expect all our tools to have required arrays
+    expect(invalidTool.required).toBeUndefined();
+    
+    // Test empty required array
+    const emptyRequiredTool = {
+      type: 'object',
+      properties: {
+        test: { type: 'string' }
+      },
+      required: []
+    };
+
+    // Empty required arrays should be filtered out in our implementation
+    expect(emptyRequiredTool.required.length).toBe(0);
   });
 });

@@ -1,6 +1,6 @@
 {
   "name": "opengov-mcp-server",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "MCP server that enables a client, such as Claude Desktop, to access open government data through Socrata APIs",
   "private": false,
   "type": "module",
