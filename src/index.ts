@@ -171,12 +171,12 @@ async function createServer(transport?: OpenAICompatibleTransport): Promise<Serv
   server.setRequestHandler(ListToolsRequestSchema, async (request) => {
     console.log('[Server - ListTools] Request received');
     
-    // CLAUDE COMPATIBILITY: Restored NYC data tools with 'parameters' format
+    // MCP SPEC COMPLIANCE: Using 'inputSchema' as per latest MCP specification
     const tools = [
       {
         name: 'search',
         description: 'Search NYC Open Data portal and return matching dataset IDs',
-        parameters: {  // Claude uses 'parameters', not 'inputSchema'
+        inputSchema: {  // Latest MCP spec uses 'inputSchema'
           type: 'object',
           additionalProperties: false,
           properties: {
@@ -191,7 +191,7 @@ async function createServer(transport?: OpenAICompatibleTransport): Promise<Serv
       {
         name: 'document_retrieval',
         description: 'Retrieve dataset information from NYC Open Data portal',
-        parameters: {  // Claude uses 'parameters', not 'inputSchema'
+        inputSchema: {  // Latest MCP spec uses 'inputSchema'
           type: 'object',
           additionalProperties: false,
           properties: {

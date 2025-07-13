@@ -400,7 +400,7 @@ const documentRetrievalJsonParameters: any = {
 export const UNIFIED_SOCRATA_TOOL: Tool = {
   name: 'get_data',
   description: 'A unified tool to interact with Socrata open-data portals.',
-  parameters: jsonParameters,
+  inputSchema: jsonParameters,  // Latest MCP spec uses 'inputSchema'
   // Assert the handler type to satisfy the generic Tool.handler signature.
   // The actual call from src/index.ts will provide the correctly typed SocrataToolParams.
   handler: handleSocrataTool as (params: Record<string, unknown>) => Promise<unknown>
@@ -411,7 +411,7 @@ export const SEARCH_TOOL: Tool = {
   name: 'search',
   title: 'Search NYC Open Data',
   description: 'Search NYC Open Data portal and return matching dataset IDs',
-  parameters: searchJsonParameters,  // Claude uses 'parameters', not 'inputSchema'
+  inputSchema: searchJsonParameters,  // Latest MCP spec uses 'inputSchema'
   handler: handleSearchTool as (params: Record<string, unknown>) => Promise<unknown>
 };
 
@@ -420,7 +420,7 @@ export const DOCUMENT_RETRIEVAL_TOOL: Tool = {
   name: 'document_retrieval',
   title: 'Retrieve NYC Data',
   description: 'Retrieve dataset information from NYC Open Data portal',
-  parameters: documentRetrievalJsonParameters,  // Claude uses 'parameters', not 'inputSchema'
+  inputSchema: documentRetrievalJsonParameters,  // Latest MCP spec uses 'inputSchema'
   handler: handleDocumentRetrievalTool as (params: Record<string, unknown>) => Promise<unknown>
 };
 
