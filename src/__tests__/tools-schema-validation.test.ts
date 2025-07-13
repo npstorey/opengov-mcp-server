@@ -16,8 +16,8 @@ describe('Tools Schema Validation', () => {
     // Test search tool
     const searchParams = { ...SEARCH_TOOL.parameters };
     
-    // Check that search tool has required field with all properties
-    expect(searchParams.required).toEqual(['dataset_id', 'domain', 'query', 'where', 'limit', 'offset']);
+    // Check that search tool has required field with only query
+    expect(searchParams.required).toEqual(['query']);
     
     // Validate schema
     const searchSchemaDoc = {
@@ -139,5 +139,41 @@ describe('Tools Schema Validation', () => {
 
     // Empty required arrays should be filtered out in our implementation
     expect(emptyRequiredTool.required.length).toBe(0);
+  });
+
+  it('should use inputSchema field name for OpenAI compatibility', () => {
+    // Import the handler to simulate tools/list response
+    const { ListToolsRequestSchema } = require('@modelcontextprotocol/sdk/types.js');
+    
+    // Simulate building the tools list as done in index.ts
+    const tools = [
+      {
+        name: 'search',
+        title: 'Search Socrata Datasets',
+        description: SEARCH_TOOL.description,
+        inputSchema: { ...SEARCH_TOOL.parameters }
+      },
+      {
+        name: 'document_retrieval',
+        title: 'Retrieve Documents',
+        description: DOCUMENT_RETRIEVAL_TOOL.description,
+        inputSchema: { ...DOCUMENT_RETRIEVAL_TOOL.parameters }
+      }
+    ];
+    
+    // Verify each tool has inputSchema, not parameters
+    for (const tool of tools) {
+      expect(tool.inputSchema).toBeDefined();
+      expect((tool as any).parameters).toBeUndefined();
+      expect(tool.name).toBeTruthy();
+      expect(tool.description).toBeTruthy();
+      expect(tool.title).toBeTruthy();
+    }
+    
+    // Verify search tool has minimal required array
+    expect(tools[0].inputSchema.required).toEqual(['query']);
+    
+    // Verify document_retrieval has correct required array
+    expect(tools[1].inputSchema.required).toEqual(['ids']);
   });
 });

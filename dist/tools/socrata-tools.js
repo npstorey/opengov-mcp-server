@@ -266,7 +266,7 @@ const searchJsonParameters = {
             description: 'Offset for pagination'
         }
     },
-    required: ['dataset_id', 'domain', 'query', 'where', 'limit', 'offset']
+    required: ['query']
 };
 const documentRetrievalJsonParameters = {
     type: 'object',

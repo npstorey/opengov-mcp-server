@@ -66,7 +66,7 @@ async function createServer() {
                 },
                 serverInfo: {
                     name: 'opengov-mcp-server',
-                    version: '0.1.4'
+                    version: '0.1.5'
                 }
             };
         });
@@ -80,19 +80,21 @@ async function createServer() {
         const tools = [
             {
                 name: 'search',
+                title: 'Search Socrata Datasets',
                 description: SEARCH_TOOL.description,
-                parameters: { ...SEARCH_TOOL.parameters }
+                inputSchema: { ...SEARCH_TOOL.parameters }
             },
             {
                 name: 'document_retrieval',
+                title: 'Retrieve Documents',
                 description: DOCUMENT_RETRIEVAL_TOOL.description,
-                parameters: { ...DOCUMENT_RETRIEVAL_TOOL.parameters }
+                inputSchema: { ...DOCUMENT_RETRIEVAL_TOOL.parameters }
             }
         ].map(tool => {
             // Remove empty required arrays to satisfy OpenAI wizard validation
-            if (tool.parameters.required && Array.isArray(tool.parameters.required) && tool.parameters.required.length === 0) {
-                const { required, ...rest } = tool.parameters;
-                tool.parameters = rest;
+            if (tool.inputSchema.required && Array.isArray(tool.inputSchema.required) && tool.inputSchema.required.length === 0) {
+                const { required, ...rest } = tool.inputSchema;
+                tool.inputSchema = rest;
             }
             return tool;
         });
