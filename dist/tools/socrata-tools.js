@@ -240,6 +240,7 @@ const jsonParameters = {
 // JSON schemas for the new tools
 const searchJsonParameters = {
     type: 'object',
+    additionalProperties: false,
     properties: {
         dataset_id: {
             type: 'string',
@@ -270,6 +271,7 @@ const searchJsonParameters = {
 };
 const documentRetrievalJsonParameters = {
     type: 'object',
+    additionalProperties: false,
     properties: {
         ids: {
             type: 'array',

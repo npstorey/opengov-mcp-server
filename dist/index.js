@@ -62,7 +62,15 @@ async function createServer() {
                 capabilities: {
                     tools: {
                         supported: true
-                    }
+                    },
+                    prompts: {
+                        supported: true
+                    },
+                    resources: {
+                        supported: false
+                    },
+                    logging: {},
+                    experimental: {}
                 },
                 serverInfo: {
                     name: 'opengov-mcp-server',
@@ -96,6 +104,13 @@ async function createServer() {
                 const { required, ...rest } = tool.inputSchema;
                 tool.inputSchema = rest;
             }
+            // Log tool schema details for debugging
+            console.log(`[Server - ListTools] Tool '${tool.name}' schema:`, {
+                hasAdditionalProperties: 'additionalProperties' in tool.inputSchema,
+                additionalPropertiesValue: tool.inputSchema.additionalProperties,
+                requiredFields: tool.inputSchema.required,
+                propertyCount: Object.keys(tool.inputSchema.properties || {}).length
+            });
             return tool;
         });
         // Validate tool sizes only in debug mode
