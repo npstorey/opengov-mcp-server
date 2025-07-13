@@ -49,7 +49,7 @@ async function createServer(transport?: OpenAICompatibleTransport): Promise<Serv
   console.log('[Server] Creating Server instance...');
   
   const server = new Server(
-    { name: 'opengov-mcp-server', version: '0.1.1' },
+    { name: 'opengov-mcp-server', version: '0.1.5' },
     {
       capabilities: {
         tools: {},
@@ -840,6 +840,18 @@ async function startApp() {
       const originalSetHeader = res.setHeader;
       const originalJson = res.json;
       
+      // Helper function to ensure proper SSE formatting
+      const formatSSEMessage = (data: string): string => {
+        // Ensure proper SSE format with double newline at the end
+        if (!data.endsWith('\n\n')) {
+          if (!data.endsWith('\n')) {
+            return data + '\n\n';
+          }
+          return data + '\n';
+        }
+        return data;
+      };
+      
       // Track if we're writing an initialize response
       let isInitializeResponse = false;
       
@@ -952,11 +964,25 @@ async function startApp() {
           }
         }
         
+        // For SSE responses, ensure proper formatting
+        if (res.getHeader('Content-Type') === 'text/event-stream' && typeof chunk === 'string') {
+          chunk = formatSSEMessage(chunk);
+        }
+        
         if (typeof encoding === 'function') {
           callback = encoding;
           encoding = undefined;
         }
-        return originalWrite.call(this, chunk, encoding, callback);
+        
+        // Call original write and ensure data is flushed for SSE
+        const result = originalWrite.call(this, chunk, encoding, callback);
+        
+        // Force flush for SSE to ensure Claude receives data immediately
+        if (res.getHeader('Content-Type') === 'text/event-stream' && (res as any).flush) {
+          (res as any).flush();
+        }
+        
+        return result;
       };
       
       res.end = function(chunk?: any, encoding?: any, callback?: any) {
@@ -978,6 +1004,22 @@ async function startApp() {
           callback = encoding;
           encoding = undefined;
         }
+        
+        // For SSE responses, add a small delay to ensure all data is transmitted
+        if (res.getHeader('Content-Type') === 'text/event-stream') {
+          // Flush any pending data first
+          if ((res as any).flush) {
+            (res as any).flush();
+          }
+          
+          // Add a small delay before ending the response
+          setTimeout(() => {
+            originalEnd.call(this, chunk, encoding, callback);
+          }, 10); // 10ms delay
+          
+          return this; // Return the response object for chaining
+        }
+        
         return originalEnd.call(this, chunk, encoding, callback);
       };
       
