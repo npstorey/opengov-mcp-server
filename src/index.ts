@@ -171,27 +171,45 @@ async function createServer(transport?: OpenAICompatibleTransport): Promise<Serv
   server.setRequestHandler(ListToolsRequestSchema, async (request) => {
     console.log('[Server - ListTools] Request received');
     
-    // PHASE 8: Minimal echo tool test
+    // CLAUDE COMPATIBILITY: Restored NYC data tools with 'parameters' format
     const tools = [
       {
-        name: 'echo',
-        title: 'Echo',
-        description: 'Returns the input text',
-        inputSchema: {
+        name: 'search',
+        description: 'Search NYC Open Data portal and return matching dataset IDs',
+        parameters: {  // Claude uses 'parameters', not 'inputSchema'
           type: 'object',
+          additionalProperties: false,
           properties: {
-            text: { 
+            query: {
               type: 'string',
-              description: 'The text to echo back'
+              description: 'Search query for full-text search'
             }
           },
-          required: ['text']
+          required: ['query']
+        }
+      },
+      {
+        name: 'document_retrieval',
+        description: 'Retrieve dataset information from NYC Open Data portal',
+        parameters: {  // Claude uses 'parameters', not 'inputSchema'
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            ids: {
+              type: 'array',
+              items: {
+                type: 'string'
+              },
+              description: 'Array of document IDs to retrieve'
+            }
+          },
+          required: ['ids']
         }
       }
     ];
     
-    console.log('[Server - ListTools] PHASE 8: Returning minimal echo tool');
-    console.log('[Server - ListTools] Tool schema:', JSON.stringify(tools[0], null, 2));
+    console.log('[Server - ListTools] Returning NYC data tools for Claude compatibility');
+    console.log(`[Server - ListTools] Tool count: ${tools.length}`);
     
     return { tools };
   });
@@ -443,22 +461,7 @@ https://data.cityofnewyork.us/resource/{dataset-id}.{format}
     const toolName = request.params.name;
     const toolArgs = request.params.arguments;
 
-    // PHASE 8: Handle echo tool
-    if (toolName === 'echo') {
-      try {
-        console.log('[Server] PHASE 8: Echo tool called with args:', JSON.stringify(toolArgs, null, 2));
-        const text = toolArgs?.text || 'No text provided';
-        return {
-          content: [{ type: 'text', text: text }],
-          isError: false
-        };
-      } catch (error) {
-        console.error('[Server] Echo tool error:', error);
-        throw error;
-      }
-    }
-
-    // Handle new search tool
+    // Handle search tool (restored for Claude compatibility)
     if (toolName === 'search') {
       try {
         console.log(`[Server] Calling search tool with args:`, JSON.stringify(toolArgs, null, 2));

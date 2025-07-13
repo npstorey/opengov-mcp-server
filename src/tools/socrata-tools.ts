@@ -411,7 +411,7 @@ export const SEARCH_TOOL: Tool = {
   name: 'search',
   title: 'Search NYC Open Data',
   description: 'Search NYC Open Data portal and return matching dataset IDs',
-  inputSchema: searchJsonParameters,
+  parameters: searchJsonParameters,  // Claude uses 'parameters', not 'inputSchema'
   handler: handleSearchTool as (params: Record<string, unknown>) => Promise<unknown>
 };
 
@@ -420,7 +420,7 @@ export const DOCUMENT_RETRIEVAL_TOOL: Tool = {
   name: 'document_retrieval',
   title: 'Retrieve NYC Data',
   description: 'Retrieve dataset information from NYC Open Data portal',
-  inputSchema: documentRetrievalJsonParameters,
+  parameters: documentRetrievalJsonParameters,  // Claude uses 'parameters', not 'inputSchema'
   handler: handleDocumentRetrievalTool as (params: Record<string, unknown>) => Promise<unknown>
 };
 

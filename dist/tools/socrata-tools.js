@@ -277,7 +277,7 @@ export const SEARCH_TOOL = {
     name: 'search',
     title: 'Search NYC Open Data',
     description: 'Search NYC Open Data portal and return matching dataset IDs',
-    inputSchema: searchJsonParameters,
+    parameters: searchJsonParameters, // Claude uses 'parameters', not 'inputSchema'
     handler: handleSearchTool
 };
 // New document retrieval tool
@@ -285,7 +285,7 @@ export const DOCUMENT_RETRIEVAL_TOOL = {
     name: 'document_retrieval',
     title: 'Retrieve NYC Data',
     description: 'Retrieve dataset information from NYC Open Data portal',
-    inputSchema: documentRetrievalJsonParameters,
+    parameters: documentRetrievalJsonParameters, // Claude uses 'parameters', not 'inputSchema'
     handler: handleDocumentRetrievalTool
 };
 // Main handler function that dispatches to specific handlers based on type
