@@ -672,28 +672,61 @@ export async function handleDocumentRetrievalTool(
   const isCatalogRequest = params.ids.some(id => id.endsWith(':catalog'));
   
   if (isCatalogRequest) {
-    // Extract dataset IDs and fetch their metadata
+    // Extract dataset IDs from the encoded IDs
     const datasetIds = params.ids
       .filter(id => id.endsWith(':catalog'))
       .map(id => id.replace(':catalog', ''));
     
-    // Fetch metadata for each dataset
-    const metadataResults: any[] = [];
-    for (const datasetId of datasetIds) {
+    console.log('[DocumentRetrieval] Fetching catalog info for datasets:', datasetIds);
+    
+    // For catalog requests, return concise catalog information
+    // We'll fetch all catalog results and filter for the requested IDs
+    const catalogResults = await handleCatalog({
+      domain,
+      limit: 100, // Fetch more to ensure we find all requested datasets
+      offset: 0
+    });
+    
+    // Filter to only include the requested datasets
+    const requestedDatasets = catalogResults.filter((dataset: any) => 
+      datasetIds.includes(dataset.id)
+    );
+    
+    // If some datasets weren't found in the first batch, try searching for them individually
+    const foundIds = requestedDatasets.map((d: any) => d.id);
+    const missingIds = datasetIds.filter(id => !foundIds.includes(id));
+    
+    for (const missingId of missingIds) {
       try {
-        const metadata = await handleDatasetMetadata({ datasetId, domain });
-        metadataResults.push(metadata);
-      } catch (error) {
-        console.error(`Failed to fetch metadata for dataset ${datasetId}:`, error);
-        // Include error information in the result
-        metadataResults.push({
-          id: datasetId,
-          error: error instanceof Error ? error.message : 'Unknown error'
+        // Search specifically for this dataset ID
+        const searchResults = await handleCatalog({
+          query: missingId,
+          domain,
+          limit: 10,
+          offset: 0
         });
+        
+        // Find exact match
+        const exactMatch = searchResults.find((d: any) => d.id === missingId);
+        if (exactMatch) {
+          requestedDatasets.push(exactMatch);
+        }
+      } catch (error) {
+        console.error(`Failed to find dataset ${missingId}:`, error);
+        // Include a minimal dataset info with error indication
+        requestedDatasets.push({
+          id: missingId,
+          name: `Dataset ${missingId} (not found)`,
+          description: error instanceof Error ? error.message : 'Dataset not found',
+          datasetType: 'error',
+          category: 'Error',
+          tags: ['error', 'not-found'],
+          error: true
+        } as DatasetMetadata);
       }
     }
     
-    return metadataResults;
+    return requestedDatasets;
   }
   
   // Otherwise, handle regular document retrieval

@@ -141,12 +141,12 @@ async function createServer(transport) {
     // Handle ListTools
     server.setRequestHandler(ListToolsRequestSchema, async (request) => {
         console.log('[Server - ListTools] Request received');
-        // CLAUDE COMPATIBILITY: Restored NYC data tools with 'parameters' format
+        // MCP SPEC COMPLIANCE: Using 'inputSchema' as per latest MCP specification
         const tools = [
             {
                 name: 'search',
                 description: 'Search NYC Open Data portal and return matching dataset IDs',
-                parameters: {
+                inputSchema: {
                     type: 'object',
                     additionalProperties: false,
                     properties: {
@@ -161,7 +161,7 @@ async function createServer(transport) {
             {
                 name: 'document_retrieval',
                 description: 'Retrieve dataset information from NYC Open Data portal',
-                parameters: {
+                inputSchema: {
                     type: 'object',
                     additionalProperties: false,
                     properties: {
