@@ -205,6 +205,65 @@ async function createServer(transport?: OpenAICompatibleTransport): Promise<Serv
           },
           required: ['ids']
         }
+      },
+      {
+        name: 'get_data',
+        description: 'Query and analyze data from NYC Open Data portal datasets',
+        inputSchema: {  // Latest MCP spec uses 'inputSchema'
+          type: 'object',
+          properties: {
+            type: {
+              type: 'string',
+              enum: ['catalog', 'metadata', 'query', 'metrics'],
+              description: 'Operation to perform'
+            },
+            query: {
+              type: 'string',
+              description: 'General search phrase OR a full SoQL query string. If this is a full SoQL query (e.g., starts with SELECT), other SoQL parameters like select, where, q might be overridden or ignored by the handler in favor of the full SoQL query. If it\'s a search phrase, it will likely be used for a full-text search ($q parameter to Socrata).'
+            },
+            domain: {
+              type: 'string',
+              description: 'The Socrata domain (e.g., data.cityofnewyork.us)'
+            },
+            limit: {
+              type: 'string',
+              description: 'Number of results to return (e.g., "10", "100"), or "all" to fetch all available data'
+            },
+            offset: {
+              type: 'integer',
+              description: 'Offset for pagination'
+            },
+            select: {
+              type: 'string',
+              description: 'SoQL SELECT clause'
+            },
+            where: {
+              type: 'string',
+              description: 'SoQL WHERE clause'
+            },
+            order: {
+              type: 'string',
+              description: 'SoQL ORDER BY clause'
+            },
+            group: {
+              type: 'string',
+              description: 'SoQL GROUP BY clause'
+            },
+            having: {
+              type: 'string',
+              description: 'SoQL HAVING clause'
+            },
+            dataset_id: {
+              type: 'string',
+              description: 'Dataset ID (for metadata, column-info, data-access)'
+            },
+            q: {
+              type: 'string',
+              description: 'Full-text search query within the dataset (used in data access)'
+            }
+          },
+          required: ['type']
+        }
       }
     ];
     
