@@ -5,7 +5,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import crypto from 'crypto';
-import { UNIFIED_SOCRATA_TOOL, SEARCH_TOOL, DOCUMENT_RETRIEVAL_TOOL, socrataToolZodSchema, searchToolZodSchema, documentRetrievalZodSchema, handleSearchTool, handleDocumentRetrievalTool } from './tools/socrata-tools.js';
+import { UNIFIED_SOCRATA_TOOL, socrataToolZodSchema, searchToolZodSchema, documentRetrievalZodSchema, handleSearchTool, handleDocumentRetrievalTool } from './tools/socrata-tools.js';
 import { z } from 'zod';
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 // Workaround: Define schemas locally since they're not properly exported from SDK
@@ -141,46 +141,26 @@ async function createServer(transport) {
     // Handle ListTools
     server.setRequestHandler(ListToolsRequestSchema, async (request) => {
         console.log('[Server - ListTools] Request received');
+        // PHASE 8: Minimal echo tool test
         const tools = [
             {
-                name: 'search',
-                title: SEARCH_TOOL.title || 'Search NYC Open Data',
-                description: SEARCH_TOOL.description,
-                inputSchema: { ...SEARCH_TOOL.inputSchema }
-            },
-            {
-                name: 'document_retrieval',
-                title: DOCUMENT_RETRIEVAL_TOOL.title || 'Retrieve NYC Data',
-                description: DOCUMENT_RETRIEVAL_TOOL.description,
-                inputSchema: { ...DOCUMENT_RETRIEVAL_TOOL.inputSchema }
-            }
-        ].map(tool => {
-            // Remove empty required arrays to satisfy OpenAI wizard validation
-            if (tool.inputSchema.required && Array.isArray(tool.inputSchema.required) && tool.inputSchema.required.length === 0) {
-                const { required, ...rest } = tool.inputSchema;
-                tool.inputSchema = rest;
-            }
-            // Log tool schema details for debugging
-            console.log(`[Server - ListTools] Tool '${tool.name}' schema:`, {
-                hasAdditionalProperties: 'additionalProperties' in tool.inputSchema,
-                additionalPropertiesValue: tool.inputSchema.additionalProperties,
-                requiredFields: tool.inputSchema.required,
-                propertyCount: Object.keys(tool.inputSchema.properties || {}).length
-            });
-            return tool;
-        });
-        // Validate tool sizes only in debug mode
-        if (process.env.DEBUG) {
-            for (const tool of tools) {
-                const size = Buffer.byteLength(JSON.stringify(tool), 'utf8');
-                if (size > 2048) {
-                    console.error(`[Server - ListTools] WARNING: Tool ${tool.name} exceeds 2KB limit: ${size} bytes`);
-                }
-                else {
-                    console.log(`[Server - ListTools] Tool ${tool.name} size: ${size} bytes (OK)`);
+                name: 'echo',
+                title: 'Echo',
+                description: 'Returns the input text',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        text: {
+                            type: 'string',
+                            description: 'The text to echo back'
+                        }
+                    },
+                    required: ['text']
                 }
             }
-        }
+        ];
+        console.log('[Server - ListTools] PHASE 8: Returning minimal echo tool');
+        console.log('[Server - ListTools] Tool schema:', JSON.stringify(tools[0], null, 2));
         return { tools };
     });
     // Handle ListPrompts
@@ -414,6 +394,21 @@ https://data.cityofnewyork.us/resource/{dataset-id}.{format}
         }
         const toolName = request.params.name;
         const toolArgs = request.params.arguments;
+        // PHASE 8: Handle echo tool
+        if (toolName === 'echo') {
+            try {
+                console.log('[Server] PHASE 8: Echo tool called with args:', JSON.stringify(toolArgs, null, 2));
+                const text = toolArgs?.text || 'No text provided';
+                return {
+                    content: [{ type: 'text', text: text }],
+                    isError: false
+                };
+            }
+            catch (error) {
+                console.error('[Server] Echo tool error:', error);
+                throw error;
+            }
+        }
         // Handle new search tool
         if (toolName === 'search') {
             try {
