@@ -36,7 +36,10 @@ async function createServer(transport) {
             prompts: {},
             resources: { subscribe: false, listChanged: true },
             roots: { listChanged: true },
-            sampling: {}
+            sampling: {},
+            experimental: {
+                elicit: true
+            }
         },
         authMethods: []
     });
@@ -110,7 +113,11 @@ async function createServer(transport) {
                         listChanged: true
                     },
                     logging: {},
-                    experimental: {}
+                    experimental: {
+                        elicit: {
+                            supported: true
+                        }
+                    }
                 },
                 serverInfo: {
                     name: 'opengov-mcp-server',
@@ -137,15 +144,15 @@ async function createServer(transport) {
         const tools = [
             {
                 name: 'search',
-                title: 'Search Socrata Datasets',
+                title: SEARCH_TOOL.title || 'Search NYC Open Data',
                 description: SEARCH_TOOL.description,
-                inputSchema: { ...SEARCH_TOOL.parameters }
+                inputSchema: { ...SEARCH_TOOL.inputSchema }
             },
             {
                 name: 'document_retrieval',
-                title: 'Retrieve Documents',
+                title: DOCUMENT_RETRIEVAL_TOOL.title || 'Retrieve NYC Data',
                 description: DOCUMENT_RETRIEVAL_TOOL.description,
-                inputSchema: { ...DOCUMENT_RETRIEVAL_TOOL.parameters }
+                inputSchema: { ...DOCUMENT_RETRIEVAL_TOOL.inputSchema }
             }
         ].map(tool => {
             // Remove empty required arrays to satisfy OpenAI wizard validation

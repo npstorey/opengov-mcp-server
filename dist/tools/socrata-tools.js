@@ -242,29 +242,9 @@ const searchJsonParameters = {
     type: 'object',
     additionalProperties: false,
     properties: {
-        dataset_id: {
-            type: 'string',
-            description: 'Dataset ID to search within. If omitted, searches across all datasets'
-        },
-        domain: {
-            type: 'string',
-            description: 'The Socrata domain (e.g., data.cityofnewyork.us)'
-        },
         query: {
             type: 'string',
             description: 'Search query for full-text search'
-        },
-        where: {
-            type: 'string',
-            description: 'SoQL WHERE clause'
-        },
-        limit: {
-            type: 'integer',
-            description: 'Number of results to return'
-        },
-        offset: {
-            type: 'integer',
-            description: 'Offset for pagination'
         }
     },
     required: ['query']
@@ -278,15 +258,7 @@ const documentRetrievalJsonParameters = {
             items: {
                 type: 'string'
             },
-            description: 'Array of document IDs to retrieve. IDs can be encoded as "dataset_id:row_id"'
-        },
-        dataset_id: {
-            type: 'string',
-            description: 'Dataset ID to retrieve documents from. Can be omitted if IDs are encoded'
-        },
-        domain: {
-            type: 'string',
-            description: 'The Socrata domain (e.g., data.cityofnewyork.us)'
+            description: 'Array of document IDs to retrieve'
         }
     },
     required: ['ids']
@@ -303,15 +275,17 @@ export const UNIFIED_SOCRATA_TOOL = {
 // New search tool that returns only id/score pairs
 export const SEARCH_TOOL = {
     name: 'search',
-    description: 'Search Socrata datasets and return matching document IDs with relevance scores.',
-    parameters: searchJsonParameters,
+    title: 'Search NYC Open Data',
+    description: 'Search NYC Open Data portal and return matching dataset IDs',
+    inputSchema: searchJsonParameters,
     handler: handleSearchTool
 };
 // New document retrieval tool
 export const DOCUMENT_RETRIEVAL_TOOL = {
     name: 'document_retrieval',
-    description: 'Retrieve full document content from Socrata datasets by document IDs.',
-    parameters: documentRetrievalJsonParameters,
+    title: 'Retrieve NYC Data',
+    description: 'Retrieve dataset information from NYC Open Data portal',
+    inputSchema: documentRetrievalJsonParameters,
     handler: handleDocumentRetrievalTool
 };
 // Main handler function that dispatches to specific handlers based on type
