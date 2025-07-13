@@ -64,7 +64,7 @@ curl -X POST http://localhost:10000/mcp \
   }'
 ```
 
-This returns dataset IDs in the format `datasetId:catalog` for datasets matching "crime".
+This returns dataset IDs in the format `dataset_id:catalog` for datasets matching "crime".
 
 ### Retrieve Dataset Metadata
 
@@ -106,7 +106,7 @@ curl -X POST http://localhost:10000/mcp \
     "params": {
       "name": "search",
       "arguments": {
-        "datasetId": "ijzp-q8t2",
+        "dataset_id": "ijzp-q8t2",
         "domain": "data.cityofchicago.org",
         "query": "theft",
         "limit": 10
@@ -132,7 +132,7 @@ curl -X POST http://localhost:10000/mcp \
     "params": {
       "name": "document_retrieval",
       "arguments": {
-        "datasetId": "ijzp-q8t2",
+        "dataset_id": "ijzp-q8t2",
         "domain": "data.cityofchicago.org",
         "ids": ["12345", "67890"]
       }
@@ -158,7 +158,7 @@ curl -X POST http://localhost:10000/mcp \
       "name": "get_data",
       "arguments": {
         "type": "query",
-        "datasetId": "ijzp-q8t2",
+        "dataset_id": "ijzp-q8t2",
         "domain": "data.cityofchicago.org",
         "query": "SELECT primary_type, COUNT(*) as count GROUP BY primary_type ORDER BY count DESC LIMIT 10"
       }
@@ -170,8 +170,8 @@ curl -X POST http://localhost:10000/mcp \
 ## ID Encoding Format
 
 When searching without a dataset ID, results use encoded IDs:
-- Dataset metadata: `datasetId:catalog`
-- Regular records: `datasetId:rowId`
+- Dataset metadata: `dataset_id:catalog`
+- Regular records: `dataset_id:row_id`
 - Row-based records: `row_N` (where N is the row index)
 
 The document_retrieval tool automatically parses these encoded IDs.

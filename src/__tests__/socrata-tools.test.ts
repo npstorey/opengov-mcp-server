@@ -274,7 +274,7 @@ describe('Socrata Tools', () => {
       // Test each type of operation
       await handleSocrataTool({ type: 'catalog', query: 'budget' });
       await handleSocrataTool({ type: 'metadata', query: 'abc-123' });
-      await handleSocrataTool({ type: 'query', datasetId: 'abc-123', limit: 20 });
+      await handleSocrataTool({ type: 'query', dataset_id: 'abc-123', limit: 20 });
       await handleSocrataTool({ type: 'metrics' });
       
       // Verify that each call counts (query type makes 2 calls - count + data)
@@ -284,7 +284,7 @@ describe('Socrata Tools', () => {
     it('should map query to $query for query operations', async () => {
       await handleSocrataTool({ 
         type: 'query', 
-        datasetId: 'abc-123', 
+        dataset_id: 'abc-123', 
         query: 'SELECT * WHERE amount > 1000' 
       });
       
@@ -305,10 +305,10 @@ describe('Socrata Tools', () => {
 
     it('should throw an error when datasetId is missing for dataset operations', async () => {
       await expect(handleSocrataTool({ type: 'metadata' }))
-        .rejects.toThrow('Query (expected as datasetId) is required for type=metadata');
+        .rejects.toThrow('Query (expected as dataset_id) is required for type=metadata');
       
       await expect(handleSocrataTool({ type: 'query' }))
-        .rejects.toThrow('Dataset ID (from datasetId field, or from query field if not a SoQL SELECT) is required for type=query operation.');
+        .rejects.toThrow('Dataset ID (from dataset_id field, or from query field if not a SoQL SELECT) is required for type=query operation.');
     });
   });
 

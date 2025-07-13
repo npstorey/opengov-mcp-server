@@ -147,7 +147,7 @@ async function handleSiteMetrics(params) {
 // Zod schemas for different tool types
 // Search tool schema - returns only id/score pairs
 export const searchToolZodSchema = z.object({
-    datasetId: z.string().optional().describe('Dataset ID to search within. If omitted, searches across all datasets'),
+    dataset_id: z.string().optional().describe('Dataset ID to search within. If omitted, searches across all datasets'),
     domain: z.string().optional().describe('The Socrata domain (e.g., data.cityofnewyork.us)'),
     query: z.string().optional().describe('Search query for full-text search'),
     where: z.string().optional().describe('SoQL WHERE clause'),
@@ -156,8 +156,8 @@ export const searchToolZodSchema = z.object({
 });
 // Document retrieval tool schema - fetches full documents by IDs
 export const documentRetrievalZodSchema = z.object({
-    ids: z.array(z.string()).describe('Array of document IDs to retrieve. IDs can be encoded as "datasetId:rowId"'),
-    datasetId: z.string().optional().describe('Dataset ID to retrieve documents from. Can be omitted if IDs are encoded'),
+    ids: z.array(z.string()).describe('Array of document IDs to retrieve. IDs can be encoded as "dataset_id:row_id"'),
+    dataset_id: z.string().optional().describe('Dataset ID to retrieve documents from. Can be omitted if IDs are encoded'),
     domain: z.string().optional().describe('The Socrata domain (e.g., data.cityofnewyork.us)')
 });
 // 1️⃣ Zod definition for the Socrata tool's parameters.
@@ -176,7 +176,7 @@ export const socrataToolZodSchema = z.object({
     order: z.string().optional().describe('SoQL ORDER BY clause'),
     group: z.string().optional().describe('SoQL GROUP BY clause'),
     having: z.string().optional().describe('SoQL HAVING clause'),
-    datasetId: z.string().optional().describe('Dataset ID (for metadata, column-info, data-access)'), // Added for clarity, though 'query' is often used for this
+    dataset_id: z.string().optional().describe('Dataset ID (for metadata, column-info, data-access)'), // Added for clarity, though 'query' is often used for this
     q: z.string().optional().describe('Full-text search query within the dataset (used in data access)') // Added q
 });
 // 2️⃣ Manually defined JSON Schema (conforming to JsonSchema7Type)
@@ -191,7 +191,6 @@ const jsonParameters = {
         },
         query: {
             type: 'string',
-            minLength: 1,
             description: 'General search phrase OR a full SoQL query string. If this is a full SoQL query (e.g., starts with SELECT), other SoQL parameters like select, where, q might be overridden or ignored by the handler in favor of the full SoQL query. If it\'s a search phrase, it will likely be used for a full-text search ($q parameter to Socrata).'
         },
         // Optional parameters reflected from socrataToolZodSchema
@@ -200,11 +199,8 @@ const jsonParameters = {
             description: 'The Socrata domain (e.g., data.cityofnewyork.us)'
         },
         limit: {
-            oneOf: [
-                { type: 'integer', minimum: 1 },
-                { type: 'string', enum: ['all'] }
-            ],
-            description: 'Number of results to return, or "all" to fetch all available data up to configured cap'
+            type: 'string',
+            description: 'Number of results to return (e.g., "10", "100"), or "all" to fetch all available data'
         },
         offset: {
             type: 'integer',
@@ -230,7 +226,7 @@ const jsonParameters = {
             type: 'string',
             description: 'SoQL HAVING clause'
         },
-        datasetId: {
+        dataset_id: {
             type: 'string',
             description: 'Dataset ID (for metadata, column-info, data-access)'
         },
@@ -245,7 +241,7 @@ const jsonParameters = {
 const searchJsonParameters = {
     type: 'object',
     properties: {
-        datasetId: {
+        dataset_id: {
             type: 'string',
             description: 'Dataset ID to search within. If omitted, searches across all datasets'
         },
@@ -263,12 +259,10 @@ const searchJsonParameters = {
         },
         limit: {
             type: 'integer',
-            minimum: 1,
             description: 'Number of results to return'
         },
         offset: {
             type: 'integer',
-            minimum: 0,
             description: 'Offset for pagination'
         }
     }
@@ -281,9 +275,9 @@ const documentRetrievalJsonParameters = {
             items: {
                 type: 'string'
             },
-            description: 'Array of document IDs to retrieve. IDs can be encoded as "datasetId:rowId"'
+            description: 'Array of document IDs to retrieve. IDs can be encoded as "dataset_id:row_id"'
         },
-        datasetId: {
+        dataset_id: {
             type: 'string',
             description: 'Dataset ID to retrieve documents from. Can be omitted if IDs are encoded'
         },
@@ -319,12 +313,14 @@ export const DOCUMENT_RETRIEVAL_TOOL = {
 };
 // Main handler function that dispatches to specific handlers based on type
 // It now expects parameters already parsed by the MCP SDK according to socrataToolZodSchema.
-export async function handleSocrataTool(params
+export async function handleSocrataTool(rawParams
 // context?: McpToolHandlerContext // Context removed for now to align with Tool.handler type
 ) {
-    // The 'rawParams' logging and Zod parsing are no longer needed here, as the SDK handles parsing.
-    // console.log('[DEBUG] Raw params received by handler:', JSON.stringify(rawParams, null, 2)); 
-    // const params = socrataToolZodSchema.parse(rawParams); // No longer needed
+    // Map old parameter names to new ones for backward compatibility
+    const params = {
+        ...rawParams,
+        dataset_id: rawParams.dataset_id || rawParams.datasetId
+    };
     const type = params.type; // Directly use the parsed 'type'
     const query = params.query; // Directly use the parsed 'query'
     // Use a mutable copy for potential modifications like adding default domain/limit/offset.
@@ -356,22 +352,22 @@ export async function handleSocrataTool(params
                 offset: modifiableParams.offset
             });
         case 'metadata':
-            console.warn("[handleSocrataTool] 'metadata' case needs review: 'query' param received, but 'datasetId' was expected for dataset metadata.");
+            console.warn("[handleSocrataTool] 'metadata' case needs review: 'query' param received, but 'dataset_id' was expected for dataset metadata.");
             if (!query)
-                throw new Error('Query (expected as datasetId) is required for type=metadata');
-            // Ensure datasetId is passed; prefer params.datasetId if available, else use query.
+                throw new Error('Query (expected as dataset_id) is required for type=metadata');
+            // Ensure dataset_id is passed; prefer params.dataset_id if available, else use query.
             return handleDatasetMetadata({
-                datasetId: modifiableParams.datasetId || query,
+                datasetId: modifiableParams.dataset_id || query,
                 domain: modifiableParams.domain
             });
         case 'query': // This corresponds to 'data-access'
-            const { datasetId: dsId, query: queryField, domain: domainField, limit: limitField, offset: offsetField, select: selectField, where: whereField, order: orderField, group: groupField, having: havingField, q: zodQ } = modifiableParams;
+            const { dataset_id: dsId, query: queryField, domain: domainField, limit: limitField, offset: offsetField, select: selectField, where: whereField, order: orderField, group: groupField, having: havingField, q: zodQ } = modifiableParams;
             let effectiveDatasetId = dsId;
             if (!effectiveDatasetId && queryField && !/^\s*select/i.test(queryField)) {
                 effectiveDatasetId = queryField;
             }
             if (!effectiveDatasetId) {
-                throw new Error('Dataset ID (from datasetId field, or from query field if not a SoQL SELECT) is required for type=query operation.');
+                throw new Error('Dataset ID (from dataset_id field, or from query field if not a SoQL SELECT) is required for type=query operation.');
             }
             let passAsSoqlQuery = undefined;
             let passAsSelect = selectField;
@@ -442,13 +438,26 @@ export const handleDatasetMetadataTool = handleDatasetMetadata;
 export const handleColumnInfoTool = handleColumnInfo;
 export const handleDataAccessTool = handleDataAccess;
 export const handleSiteMetricsTool = handleSiteMetrics;
+// Helper function to provide backward compatibility for parameter names
+function mapSearchParams(params) {
+    return {
+        dataset_id: params.dataset_id || params.datasetId,
+        domain: params.domain,
+        query: params.query,
+        where: params.where,
+        limit: params.limit,
+        offset: params.offset
+    };
+}
 // Handler for the new search tool
-export async function handleSearchTool(params) {
+export async function handleSearchTool(rawParams) {
+    // Map old parameter names to new ones for backward compatibility
+    const params = mapSearchParams(rawParams);
     // Ensure default domain if not provided
     const domain = params.domain || getDefaultDomain();
-    // If no datasetId provided, search catalog
-    if (!params.datasetId) {
-        console.log('[SearchTool] No datasetId provided, searching catalog');
+    // If no dataset_id provided, search catalog
+    if (!params.dataset_id) {
+        console.log('[SearchTool] No dataset_id provided, searching catalog');
         // Search catalog and return dataset IDs as results
         const catalogResults = await handleCatalog({
             query: params.query,
@@ -469,7 +478,7 @@ export async function handleSearchTool(params) {
     }
     // Otherwise search within the specified dataset
     return searchIds({
-        datasetId: params.datasetId,
+        datasetId: params.dataset_id,
         domain,
         query: params.query,
         where: params.where,
@@ -477,22 +486,32 @@ export async function handleSearchTool(params) {
         offset: params.offset
     });
 }
+// Helper function to provide backward compatibility for document retrieval params
+function mapDocumentRetrievalParams(params) {
+    return {
+        ids: params.ids,
+        dataset_id: params.dataset_id || params.datasetId,
+        domain: params.domain
+    };
+}
 // Handler for the new document retrieval tool
-export async function handleDocumentRetrievalTool(params) {
+export async function handleDocumentRetrievalTool(rawParams) {
+    // Map old parameter names to new ones for backward compatibility
+    const params = mapDocumentRetrievalParams(rawParams);
     // Ensure default domain if not provided
     const domain = params.domain || getDefaultDomain();
     // If no IDs provided, retrieve all documents with default limits
     if (!params.ids || params.ids.length === 0) {
-        if (!params.datasetId) {
-            throw new McpError(ErrorCode.InvalidParams, 'Either ids or datasetId must be provided');
+        if (!params.dataset_id) {
+            throw new McpError(ErrorCode.InvalidParams, 'Either ids or dataset_id must be provided');
         }
         return retrieveAllDocuments({
-            datasetId: params.datasetId,
+            datasetId: params.dataset_id,
             domain
         });
     }
-    // Parse encoded IDs to extract datasetId if needed
-    let effectiveDatasetId = params.datasetId;
+    // Parse encoded IDs to extract dataset_id if needed
+    let effectiveDatasetId = params.dataset_id;
     const decodedIds = [];
     // Check if this is a catalog metadata request
     const isCatalogRequest = params.ids.some(id => id.endsWith(':catalog'));
@@ -540,7 +559,7 @@ export async function handleDocumentRetrievalTool(params) {
         }
     }
     if (!effectiveDatasetId) {
-        throw new McpError(ErrorCode.InvalidParams, 'Could not determine datasetId from parameters or encoded IDs');
+        throw new McpError(ErrorCode.InvalidParams, 'Could not determine dataset_id from parameters or encoded IDs');
     }
     // Retrieve documents using the decoded IDs
     return retrieveDocuments({

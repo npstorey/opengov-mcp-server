@@ -269,7 +269,7 @@ async function handleSiteMetrics(params: {
 
 // Search tool schema - returns only id/score pairs
 export const searchToolZodSchema = z.object({
-  datasetId: z.string().optional().describe('Dataset ID to search within. If omitted, searches across all datasets'),
+  dataset_id: z.string().optional().describe('Dataset ID to search within. If omitted, searches across all datasets'),
   domain: z.string().optional().describe('The Socrata domain (e.g., data.cityofnewyork.us)'),
   query: z.string().optional().describe('Search query for full-text search'),
   where: z.string().optional().describe('SoQL WHERE clause'),
@@ -279,8 +279,8 @@ export const searchToolZodSchema = z.object({
 
 // Document retrieval tool schema - fetches full documents by IDs
 export const documentRetrievalZodSchema = z.object({
-  ids: z.array(z.string()).describe('Array of document IDs to retrieve. IDs can be encoded as "datasetId:rowId"'),
-  datasetId: z.string().optional().describe('Dataset ID to retrieve documents from. Can be omitted if IDs are encoded'),
+  ids: z.array(z.string()).describe('Array of document IDs to retrieve. IDs can be encoded as "dataset_id:row_id"'),
+  dataset_id: z.string().optional().describe('Dataset ID to retrieve documents from. Can be omitted if IDs are encoded'),
   domain: z.string().optional().describe('The Socrata domain (e.g., data.cityofnewyork.us)')
 });
 
@@ -300,7 +300,7 @@ export const socrataToolZodSchema = z.object({
   order: z.string().optional().describe('SoQL ORDER BY clause'),
   group: z.string().optional().describe('SoQL GROUP BY clause'),
   having: z.string().optional().describe('SoQL HAVING clause'),
-  datasetId: z.string().optional().describe('Dataset ID (for metadata, column-info, data-access)'), // Added for clarity, though 'query' is often used for this
+  dataset_id: z.string().optional().describe('Dataset ID (for metadata, column-info, data-access)'), // Added for clarity, though 'query' is often used for this
   q: z.string().optional().describe('Full-text search query within the dataset (used in data access)') // Added q
 });
 
@@ -321,7 +321,6 @@ const jsonParameters: any = {
     },
     query: {
       type: 'string',
-      minLength: 1,
       description: 'General search phrase OR a full SoQL query string. If this is a full SoQL query (e.g., starts with SELECT), other SoQL parameters like select, where, q might be overridden or ignored by the handler in favor of the full SoQL query. If it\'s a search phrase, it will likely be used for a full-text search ($q parameter to Socrata).'
     },
     // Optional parameters reflected from socrataToolZodSchema
@@ -330,11 +329,8 @@ const jsonParameters: any = {
       description: 'The Socrata domain (e.g., data.cityofnewyork.us)'
     },
     limit: {
-      oneOf: [
-        { type: 'integer', minimum: 1 },
-        { type: 'string', enum: ['all'] }
-      ],
-      description: 'Number of results to return, or "all" to fetch all available data up to configured cap'
+      type: 'string',
+      description: 'Number of results to return (e.g., "10", "100"), or "all" to fetch all available data'
     },
     offset: {
       type: 'integer',
@@ -360,7 +356,7 @@ const jsonParameters: any = {
       type: 'string',
       description: 'SoQL HAVING clause'
     },
-    datasetId: {
+    dataset_id: {
       type: 'string',
       description: 'Dataset ID (for metadata, column-info, data-access)'
     },
@@ -376,7 +372,7 @@ const jsonParameters: any = {
 const searchJsonParameters: any = {
   type: 'object',
   properties: {
-    datasetId: {
+    dataset_id: {
       type: 'string',
       description: 'Dataset ID to search within. If omitted, searches across all datasets'
     },
@@ -394,12 +390,10 @@ const searchJsonParameters: any = {
     },
     limit: {
       type: 'integer',
-      minimum: 1,
       description: 'Number of results to return'
     },
     offset: {
       type: 'integer',
-      minimum: 0,
       description: 'Offset for pagination'
     }
   }
@@ -413,9 +407,9 @@ const documentRetrievalJsonParameters: any = {
       items: {
         type: 'string'
       },
-      description: 'Array of document IDs to retrieve. IDs can be encoded as "datasetId:rowId"'
+      description: 'Array of document IDs to retrieve. IDs can be encoded as "dataset_id:row_id"'
     },
-    datasetId: {
+    dataset_id: {
       type: 'string',
       description: 'Dataset ID to retrieve documents from. Can be omitted if IDs are encoded'
     },
@@ -456,12 +450,14 @@ export const DOCUMENT_RETRIEVAL_TOOL: Tool = {
 // Main handler function that dispatches to specific handlers based on type
 // It now expects parameters already parsed by the MCP SDK according to socrataToolZodSchema.
 export async function handleSocrataTool(
-  params: SocrataToolParams
+  rawParams: SocrataToolParams | any
   // context?: McpToolHandlerContext // Context removed for now to align with Tool.handler type
 ): Promise<unknown> {
-  // The 'rawParams' logging and Zod parsing are no longer needed here, as the SDK handles parsing.
-  // console.log('[DEBUG] Raw params received by handler:', JSON.stringify(rawParams, null, 2)); 
-  // const params = socrataToolZodSchema.parse(rawParams); // No longer needed
+  // Map old parameter names to new ones for backward compatibility
+  const params: SocrataToolParams = {
+    ...rawParams,
+    dataset_id: rawParams.dataset_id || rawParams.datasetId
+  };
 
   const type = params.type; // Directly use the parsed 'type'
   const query = params.query; // Directly use the parsed 'query'
@@ -498,16 +494,16 @@ export async function handleSocrataTool(
         offset: modifiableParams.offset 
       });
     case 'metadata':
-      console.warn("[handleSocrataTool] 'metadata' case needs review: 'query' param received, but 'datasetId' was expected for dataset metadata.");
-      if (!query) throw new Error('Query (expected as datasetId) is required for type=metadata');
-      // Ensure datasetId is passed; prefer params.datasetId if available, else use query.
+      console.warn("[handleSocrataTool] 'metadata' case needs review: 'query' param received, but 'dataset_id' was expected for dataset metadata.");
+      if (!query) throw new Error('Query (expected as dataset_id) is required for type=metadata');
+      // Ensure dataset_id is passed; prefer params.dataset_id if available, else use query.
       return handleDatasetMetadata({ 
-        datasetId: modifiableParams.datasetId || query, 
+        datasetId: modifiableParams.dataset_id || query, 
         domain: modifiableParams.domain 
       });
     case 'query': // This corresponds to 'data-access'
       const {
-        datasetId: dsId,
+        dataset_id: dsId,
         query: queryField,
         domain: domainField,
         limit: limitField,
@@ -525,7 +521,7 @@ export async function handleSocrataTool(
         effectiveDatasetId = queryField;
       }
       if (!effectiveDatasetId) {
-        throw new Error('Dataset ID (from datasetId field, or from query field if not a SoQL SELECT) is required for type=query operation.');
+        throw new Error('Dataset ID (from dataset_id field, or from query field if not a SoQL SELECT) is required for type=query operation.');
       }
 
       let passAsSoqlQuery: string | undefined = undefined;
@@ -600,16 +596,31 @@ export const handleColumnInfoTool = handleColumnInfo;
 export const handleDataAccessTool = handleDataAccess;
 export const handleSiteMetricsTool = handleSiteMetrics;
 
+// Helper function to provide backward compatibility for parameter names
+function mapSearchParams(params: any): SearchToolParams {
+  return {
+    dataset_id: params.dataset_id || params.datasetId,
+    domain: params.domain,
+    query: params.query,
+    where: params.where,
+    limit: params.limit,
+    offset: params.offset
+  };
+}
+
 // Handler for the new search tool
 export async function handleSearchTool(
-  params: SearchToolParams
+  rawParams: SearchToolParams | any
 ): Promise<SearchIdsResponse> {
+  // Map old parameter names to new ones for backward compatibility
+  const params = mapSearchParams(rawParams);
+  
   // Ensure default domain if not provided
   const domain = params.domain || getDefaultDomain();
   
-  // If no datasetId provided, search catalog
-  if (!params.datasetId) {
-    console.log('[SearchTool] No datasetId provided, searching catalog');
+  // If no dataset_id provided, search catalog
+  if (!params.dataset_id) {
+    console.log('[SearchTool] No dataset_id provided, searching catalog');
     
     // Search catalog and return dataset IDs as results
     const catalogResults = await handleCatalog({
@@ -634,7 +645,7 @@ export async function handleSearchTool(
   
   // Otherwise search within the specified dataset
   return searchIds({
-    datasetId: params.datasetId,
+    datasetId: params.dataset_id,
     domain,
     query: params.query,
     where: params.where,
@@ -643,29 +654,41 @@ export async function handleSearchTool(
   });
 }
 
+// Helper function to provide backward compatibility for document retrieval params
+function mapDocumentRetrievalParams(params: any): DocumentRetrievalParams {
+  return {
+    ids: params.ids,
+    dataset_id: params.dataset_id || params.datasetId,
+    domain: params.domain
+  };
+}
+
 // Handler for the new document retrieval tool
 export async function handleDocumentRetrievalTool(
-  params: DocumentRetrievalParams
+  rawParams: DocumentRetrievalParams | any
 ): Promise<DocumentRetrievalResponse> {
+  // Map old parameter names to new ones for backward compatibility
+  const params = mapDocumentRetrievalParams(rawParams);
+  
   // Ensure default domain if not provided
   const domain = params.domain || getDefaultDomain();
   
   // If no IDs provided, retrieve all documents with default limits
   if (!params.ids || params.ids.length === 0) {
-    if (!params.datasetId) {
+    if (!params.dataset_id) {
       throw new McpError(
         ErrorCode.InvalidParams,
-        'Either ids or datasetId must be provided'
+        'Either ids or dataset_id must be provided'
       );
     }
     return retrieveAllDocuments({
-      datasetId: params.datasetId,
+      datasetId: params.dataset_id,
       domain
     });
   }
   
-  // Parse encoded IDs to extract datasetId if needed
-  let effectiveDatasetId = params.datasetId;
+  // Parse encoded IDs to extract dataset_id if needed
+  let effectiveDatasetId = params.dataset_id;
   const decodedIds: string[] = [];
   
   // Check if this is a catalog metadata request
@@ -723,7 +746,7 @@ export async function handleDocumentRetrievalTool(
   if (!effectiveDatasetId) {
     throw new McpError(
       ErrorCode.InvalidParams,
-      'Could not determine datasetId from parameters or encoded IDs'
+      'Could not determine dataset_id from parameters or encoded IDs'
     );
   }
   
