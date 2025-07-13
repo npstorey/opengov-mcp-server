@@ -8,12 +8,24 @@ import crypto from 'crypto';
 import { UNIFIED_SOCRATA_TOOL, SEARCH_TOOL, DOCUMENT_RETRIEVAL_TOOL, socrataToolZodSchema, searchToolZodSchema, documentRetrievalZodSchema, handleSearchTool, handleDocumentRetrievalTool } from './tools/socrata-tools.js';
 import { z } from 'zod';
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-// Workaround: Define ListPromptsRequestSchema locally since it's not properly exported from SDK
+// Workaround: Define schemas locally since they're not properly exported from SDK
 const ListPromptsRequestSchema = z.object({
     method: z.literal("prompts/list"),
     params: z.optional(z.object({
         cursor: z.optional(z.string())
     }))
+});
+const ListResourcesRequestSchema = z.object({
+    method: z.literal("resources/list"),
+    params: z.optional(z.object({
+        cursor: z.optional(z.string())
+    }))
+});
+const ReadResourceRequestSchema = z.object({
+    method: z.literal("resources/read"),
+    params: z.object({
+        uri: z.string()
+    })
 });
 dotenv.config();
 async function createServer(transport) {
@@ -22,6 +34,7 @@ async function createServer(transport) {
         capabilities: {
             tools: {},
             prompts: {},
+            resources: { subscribe: false, listChanged: true },
             roots: { listChanged: true },
             sampling: {}
         },
@@ -93,7 +106,8 @@ async function createServer(transport) {
                         supported: true
                     },
                     resources: {
-                        supported: false
+                        supported: true,
+                        listChanged: true
                     },
                     logging: {},
                     experimental: {}
@@ -165,8 +179,224 @@ async function createServer(transport) {
     // Handle ListPrompts
     server.setRequestHandler(ListPromptsRequestSchema, async (request) => {
         console.log('[Server - ListPrompts] Request received');
+        const prompts = [
+            {
+                name: 'analyze_nyc_data',
+                title: 'Analyze NYC Open Data',
+                description: 'Search and analyze datasets from NYC Open Data portal',
+                arguments: [
+                    {
+                        name: 'topic',
+                        description: 'The topic or dataset to analyze (e.g., "crime statistics", "restaurant inspections", "311 complaints")',
+                        required: true
+                    },
+                    {
+                        name: 'time_period',
+                        description: 'Time period for the analysis (e.g., "last month", "2023", "past 5 years")',
+                        required: false
+                    }
+                ]
+            },
+            {
+                name: 'find_dataset',
+                title: 'Find NYC Dataset',
+                description: 'Help find specific datasets in the NYC Open Data portal',
+                arguments: [
+                    {
+                        name: 'description',
+                        description: 'Description of the data you are looking for',
+                        required: true
+                    }
+                ]
+            },
+            {
+                name: 'compare_neighborhoods',
+                title: 'Compare NYC Neighborhoods',
+                description: 'Compare data across different NYC neighborhoods or boroughs',
+                arguments: [
+                    {
+                        name: 'metric',
+                        description: 'What metric to compare (e.g., "crime rates", "air quality", "noise complaints")',
+                        required: true
+                    },
+                    {
+                        name: 'neighborhoods',
+                        description: 'Which neighborhoods or boroughs to compare (comma-separated)',
+                        required: true
+                    }
+                ]
+            }
+        ];
+        console.log(`[Server - ListPrompts] Returning ${prompts.length} prompts`);
         return {
-            prompts: [] // Return empty array for now
+            prompts
+        };
+    });
+    // Handle ListResources
+    server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
+        console.log('[Server - ListResources] Request received');
+        const resources = [
+            {
+                uri: 'data://nyc/info/portal-overview',
+                name: 'NYC Open Data Portal Overview',
+                title: 'NYC Open Data Portal Information',
+                description: 'Basic information about NYC Open Data portal and available datasets',
+                mimeType: 'text/plain'
+            },
+            {
+                uri: 'data://nyc/info/popular-datasets',
+                name: 'Popular NYC Datasets',
+                title: 'Most Popular NYC Open Data Datasets',
+                description: 'List of the most frequently accessed datasets on NYC Open Data',
+                mimeType: 'application/json'
+            },
+            {
+                uri: 'data://nyc/info/api-guide',
+                name: 'Socrata API Guide',
+                title: 'Quick Guide to Socrata API',
+                description: 'Quick reference for using Socrata API with NYC Open Data',
+                mimeType: 'text/markdown'
+            }
+        ];
+        console.log(`[Server - ListResources] Returning ${resources.length} resources`);
+        return {
+            resources,
+            nextCursor: undefined
+        };
+    });
+    // Handle ReadResource
+    server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+        console.log('[Server - ReadResource] Request received for URI:', request.params.uri);
+        const resourceContents = {
+            'data://nyc/info/portal-overview': {
+                uri: 'data://nyc/info/portal-overview',
+                name: 'NYC Open Data Portal Overview',
+                mimeType: 'text/plain',
+                text: `NYC Open Data Portal Overview
+
+The NYC Open Data portal (data.cityofnewyork.us) provides access to thousands of datasets from New York City agencies.
+
+Key Information:
+- Over 3,000+ datasets available
+- Updated regularly by city agencies
+- Free to access and use
+- Powered by Socrata platform
+- Supports various data formats (CSV, JSON, GeoJSON, etc.)
+
+Common Dataset Categories:
+- Public Safety (crime data, fire incidents, etc.)
+- Transportation (traffic, parking, transit)
+- Health (restaurant inspections, health statistics)
+- Housing & Development (building permits, violations)
+- Environment (air quality, tree census)
+- Education (school performance, enrollment)
+- Finance (budget, spending)
+
+Access Methods:
+- Web interface for browsing and filtering
+- Socrata API for programmatic access
+- Direct download in multiple formats
+- Real-time data feeds for some datasets`
+            },
+            'data://nyc/info/popular-datasets': {
+                uri: 'data://nyc/info/popular-datasets',
+                name: 'Popular NYC Datasets',
+                mimeType: 'application/json',
+                text: JSON.stringify({
+                    popular_datasets: [
+                        {
+                            name: "311 Service Requests",
+                            id: "erm2-nwe9",
+                            description: "All 311 Service Requests from 2010 to present",
+                            category: "Public Services"
+                        },
+                        {
+                            name: "NYC Restaurant Inspection Results",
+                            id: "43nn-pn8j",
+                            description: "Restaurant inspection results including letter grades",
+                            category: "Health"
+                        },
+                        {
+                            name: "Motor Vehicle Collisions - Crashes",
+                            id: "h9gi-nx95",
+                            description: "Motor vehicle collision data from NYPD",
+                            category: "Public Safety"
+                        },
+                        {
+                            name: "DOB Job Application Filings",
+                            id: "ic3t-wcy2",
+                            description: "Building permit applications filed with DOB",
+                            category: "Housing & Development"
+                        },
+                        {
+                            name: "NYPD Complaint Data Current (Year To Date)",
+                            id: "5uac-w243",
+                            description: "NYPD complaint data for current year",
+                            category: "Public Safety"
+                        }
+                    ]
+                }, null, 2)
+            },
+            'data://nyc/info/api-guide': {
+                uri: 'data://nyc/info/api-guide',
+                name: 'Socrata API Guide',
+                mimeType: 'text/markdown',
+                text: `# Socrata API Quick Guide
+
+## Basic API Structure
+\`\`\`
+https://data.cityofnewyork.us/resource/{dataset-id}.{format}
+\`\`\`
+
+## Common Parameters
+- **$limit**: Number of results to return (default: 1000, max: 50000)
+- **$offset**: Number of results to skip for pagination
+- **$where**: SoQL WHERE clause for filtering
+- **$select**: Choose specific columns to return
+- **$order**: Sort results by field(s)
+- **$q**: Full-text search query
+
+## Example Queries
+
+### Get first 10 records
+\`\`\`
+/resource/dataset-id.json?$limit=10
+\`\`\`
+
+### Filter with WHERE clause
+\`\`\`
+/resource/dataset-id.json?$where=borough='MANHATTAN' AND year=2023
+\`\`\`
+
+### Full-text search
+\`\`\`
+/resource/dataset-id.json?$q=restaurant
+\`\`\`
+
+### Select specific fields
+\`\`\`
+/resource/dataset-id.json?$select=name,address,grade&$limit=100
+\`\`\`
+
+## SoQL Functions
+- **upper()**, **lower()**: Change case
+- **starts_with()**, **contains()**: String matching
+- **within_box()**, **within_circle()**: Geospatial queries
+- **date_trunc_y()**, **date_trunc_m()**: Date truncation
+
+## Rate Limits
+- No API key required for basic access
+- With API key: Higher rate limits available
+- Consider using pagination for large datasets`
+            }
+        };
+        const content = resourceContents[request.params.uri];
+        if (!content) {
+            throw new Error(`Resource not found: ${request.params.uri}`);
+        }
+        console.log('[Server - ReadResource] Returning content for:', request.params.uri);
+        return {
+            contents: [content]
         };
     });
     // Handle CallTool
@@ -405,10 +635,23 @@ async function startApp() {
             onerror: !!transport.onerror,
             onclose: !!transport.onclose
         });
+        // Track response timestamps by session for timing analysis
+        const lastResponseTimestamps = new Map();
         // MCP endpoint
         app.all(mcpPath, async (req, res) => {
             // Track request timing
             const requestStartTime = Date.now();
+            const sessionId = req.headers['mcp-session-id'];
+            // Log timing between requests
+            if (sessionId && lastResponseTimestamps.has(sessionId)) {
+                const lastResponse = lastResponseTimestamps.get(sessionId);
+                const timeSinceLastResponse = requestStartTime - lastResponse.timestamp;
+                console.log(`[Express] Time since last ${lastResponse.method} response: ${timeSinceLastResponse}ms`);
+                // Special logging for DELETE after tools/list
+                if (req.method === 'DELETE' && lastResponse.method === 'tools/list') {
+                    console.log(`[Express] ⚠️  DELETE request received ${timeSinceLastResponse}ms after tools/list response`);
+                }
+            }
             console.log(`[Express] ${req.method} ${req.url}`);
             console.log('[Express] Request timestamp:', new Date().toISOString());
             console.log('[Express] Headers:', {
@@ -592,9 +835,25 @@ async function startApp() {
                 console.log('[Express] transport.handleRequest returned');
                 console.log('[Express] Response headersSent:', res.headersSent);
                 console.log('[Express] Response finished:', res.finished);
-                // Log request completion timing
+                // Log request completion timing and track for timing analysis
                 const requestDuration = Date.now() - requestStartTime;
                 console.log('[Express] Request completed in', requestDuration, 'ms');
+                // Track response timestamp for timing analysis
+                if (sessionId && currentRequestBody) {
+                    try {
+                        const parsed = typeof currentRequestBody === 'string' ? JSON.parse(currentRequestBody) : currentRequestBody;
+                        if (parsed.method) {
+                            lastResponseTimestamps.set(sessionId, {
+                                method: parsed.method,
+                                timestamp: Date.now()
+                            });
+                            console.log(`[Express] Recorded response timestamp for ${parsed.method}`);
+                        }
+                    }
+                    catch (e) {
+                        // Ignore parse errors
+                    }
+                }
             }
             catch (error) {
                 console.error('[Express] Error handling request:', error);
