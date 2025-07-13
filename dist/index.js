@@ -494,9 +494,9 @@ https://data.cityofnewyork.us/resource/{dataset-id}.{format}
     console.log('[Server] Server instance created and request handlers registered.');
     return server;
 }
+// Global map to store transports by session ID
+const transports = new Map();
 async function startApp() {
-    let transport;
-    let server;
     try {
         const app = express();
         const port = Number(process.env.PORT) || 8000;
@@ -533,108 +533,111 @@ async function startApp() {
             console.log('[Debug] Testing server state...');
             res.json({
                 server: 'running',
-                transport: !!transport,
-                serverConnected: !!server,
+                activeSessions: transports.size,
+                sessions: Array.from(transports.keys()).filter(k => k !== '__pending__'),
                 environment: {
                     DATA_PORTAL_URL: process.env.DATA_PORTAL_URL
                 }
             });
         });
-        // Create transport
-        console.log('[MCP] Creating transport...');
-        transport = new OpenAICompatibleTransport({
-            sessionIdGenerator: () => {
-                const sessionId = crypto.randomBytes(16).toString('hex');
-                console.log('[Transport] sessionIdGenerator called! Generated:', sessionId);
-                return sessionId;
-            },
-            // Pass callbacks in constructor options
-            onsessioninitialized: (sessionId) => {
-                console.log('[Transport] onsessioninitialized fired! Session:', sessionId);
-                // The SDK should now have set the sessionId property on the transport
-                if (transport) {
-                    console.log('[Transport] Session ID now available on transport:', transport.sessionId);
+        // Remove old global transport creation - we'll create per-session instead
+        // Helper function to create and setup a new transport/server pair
+        async function createTransportAndServer(sessionId) {
+            console.log('[MCP] Creating new transport/server pair', sessionId ? `for session ${sessionId}` : 'for initialization');
+            const transport = new OpenAICompatibleTransport({
+                sessionIdGenerator: () => {
+                    const newSessionId = crypto.randomBytes(16).toString('hex');
+                    console.log('[Transport] sessionIdGenerator called! Generated:', newSessionId);
+                    return newSessionId;
+                },
+                // Pass callbacks in constructor options
+                onsessioninitialized: (initializedSessionId) => {
+                    console.log('[Transport] onsessioninitialized fired! Session:', initializedSessionId);
+                    // Store the transport in our map when session is initialized
+                    if (!transports.has(initializedSessionId)) {
+                        console.log('[Transport] Storing transport for session:', initializedSessionId);
+                        // Transport and server are already created, just need to store the reference
+                        const entry = transports.get('__pending__');
+                        if (entry) {
+                            transports.delete('__pending__');
+                            transports.set(initializedSessionId, entry);
+                        }
+                    }
+                },
+                onsessionclosed: (closedSessionId) => {
+                    console.log('[Transport] onsessionclosed fired! Session:', closedSessionId);
+                    // Clean up transport from map
+                    if (transports.has(closedSessionId)) {
+                        console.log('[Transport] Removing transport for closed session:', closedSessionId);
+                        const entry = transports.get(closedSessionId);
+                        if (entry) {
+                            entry.cleanup().catch(err => console.error('[Transport] Error during cleanup:', err));
+                        }
+                        transports.delete(closedSessionId);
+                    }
                 }
-            },
-            onsessionclosed: (sessionId) => {
-                console.log('[Transport] onsessionclosed fired! Session:', sessionId);
-            }
-        });
-        console.log('[MCP] Transport created, checking properties...');
-        console.log('[MCP] Transport prototype:', Object.getOwnPropertyNames(Object.getPrototypeOf(transport)));
-        console.log('[MCP] Transport instance properties:', Object.getOwnPropertyNames(transport));
-        transport.onmessage = (message, extra) => {
-            console.log('[Transport] onmessage fired!', JSON.stringify(message, null, 2));
-            if (extra) {
-                console.log('[Transport] onmessage extra:', JSON.stringify(extra, null, 2));
-            }
-        };
-        transport.onerror = (error) => {
-            console.error('[Transport] onerror fired! Error:', error);
-        };
-        transport.onclose = () => {
-            console.log('[Transport] onclose fired!');
-        };
-        // Wrap handleRequest to see what's happening
-        const originalHandleRequest = transport.handleRequest.bind(transport);
-        transport.handleRequest = async (req, res) => {
-            console.log('[Transport.handleRequest] Called');
-            console.log('[Transport.handleRequest] Method:', req.method);
-            console.log('[Transport.handleRequest] URL:', req.url);
-            console.log('[Transport.handleRequest] Transport internal state:', {
-                hasServer: !!transport._server,
-                hasSession: !!transport._session,
-                serverInfo: transport._server ? {
-                    name: transport._server.name,
-                    connected: true
-                } : null
             });
-            try {
-                // The SDK's handleRequest actually accepts a third parameter for parsed body
-                const body = req.body;
-                const result = await originalHandleRequest(req, res, body);
-                console.log('[Transport.handleRequest] Completed, result:', result);
-                return result;
-            }
-            catch (error) {
-                console.error('[Transport.handleRequest] Error:', error);
-                throw error;
-            }
-        };
-        // Note: Transport will be started automatically when server.connect() is called
-        console.log('[MCP] Transport ready for connection');
-        // Create server (passing transport so initialize handler can access session ID)
-        server = await createServer(transport);
-        // Connect server to transport
-        console.log('[MCP] Connecting server to transport...');
-        // Check transport state before connection
-        console.log('[MCP] Transport state before connection:', {
-            hasServer: !!transport._server,
-            hasHandleRequest: !!transport.handleRequest,
-            transportType: transport.constructor.name
-        });
-        // Add extra logging to ensure connection works
-        const originalConnect = server.connect.bind(server);
-        server.connect = async (transport) => {
-            console.log('[Server.connect] Connecting...');
-            const result = await originalConnect(transport);
-            console.log('[Server.connect] Connected!');
-            return result;
-        };
-        await server.connect(transport);
-        console.log('[MCP] Server connected');
-        // Check transport state after connection
-        console.log('[MCP] Transport state after connection:', {
-            hasServer: !!transport._server,
-            serverName: transport._server?.name,
-            isConnected: !!transport._session
-        });
-        // Verify the connection
-        console.log('[MCP] Transport has session handlers:', {
-            onmessage: !!transport.onmessage,
-            onerror: !!transport.onerror,
-            onclose: !!transport.onclose
-        });
+            // Setup transport event handlers
+            transport.onmessage = (message, extra) => {
+                console.log('[Transport] onmessage fired!', JSON.stringify(message, null, 2));
+                if (extra) {
+                    console.log('[Transport] onmessage extra:', JSON.stringify(extra, null, 2));
+                }
+            };
+            transport.onerror = (error) => {
+                console.error('[Transport] onerror fired! Error:', error);
+            };
+            transport.onclose = () => {
+                console.log('[Transport] onclose fired!');
+            };
+            // Wrap handleRequest to see what's happening
+            const originalHandleRequest = transport.handleRequest.bind(transport);
+            transport.handleRequest = async (req, res) => {
+                console.log('[Transport.handleRequest] Called');
+                console.log('[Transport.handleRequest] Method:', req.method);
+                console.log('[Transport.handleRequest] URL:', req.url);
+                console.log('[Transport.handleRequest] Session ID:', transport.sessionId);
+                console.log('[Transport.handleRequest] Transport internal state:', {
+                    hasServer: !!transport._server,
+                    hasSession: !!transport._session,
+                    serverInfo: transport._server ? {
+                        name: transport._server.name,
+                        connected: true
+                    } : null
+                });
+                try {
+                    // The SDK's handleRequest actually accepts a third parameter for parsed body
+                    const body = req.body;
+                    const result = await originalHandleRequest(req, res, body);
+                    console.log('[Transport.handleRequest] Completed, result:', result);
+                    return result;
+                }
+                catch (error) {
+                    console.error('[Transport.handleRequest] Error:', error);
+                    throw error;
+                }
+            };
+            // Create server (passing transport so initialize handler can access session ID)
+            const server = await createServer(transport);
+            // Connect server to transport
+            console.log('[MCP] Connecting server to transport...');
+            await server.connect(transport);
+            console.log('[MCP] Server connected');
+            // Create cleanup function
+            const cleanup = async () => {
+                console.log('[Cleanup] Cleaning up transport and server');
+                try {
+                    if ('close' in server && typeof server.close === 'function') {
+                        await server.close();
+                    }
+                    await transport.close();
+                }
+                catch (error) {
+                    console.error('[Cleanup] Error during cleanup:', error);
+                }
+            };
+            return { transport, server, cleanup };
+        }
         // Track response timestamps by session for timing analysis
         const lastResponseTimestamps = new Map();
         // MCP endpoint
@@ -694,11 +697,51 @@ async function startApp() {
                     // Ignore parse errors
                 }
             }
-            if (!transport) {
-                console.error('[Express] Transport not initialized!');
+            // Determine which transport to use
+            let transportEntry;
+            let existingSessionId = req.headers['mcp-session-id'];
+            // Check if this is an initialization request
+            let isInitializeRequest = false;
+            if (req.method === 'POST' && currentRequestBody) {
+                try {
+                    const parsed = JSON.parse(currentRequestBody);
+                    isInitializeRequest = parsed.method === 'initialize';
+                }
+                catch (e) {
+                    // Ignore parse errors
+                }
+            }
+            if (existingSessionId && transports.has(existingSessionId)) {
+                // Use existing transport for this session
+                transportEntry = transports.get(existingSessionId);
+                console.log('[Express] Using existing transport for session:', existingSessionId);
+            }
+            else if (!existingSessionId && isInitializeRequest) {
+                // Create new transport for initialization request
+                console.log('[Express] Creating new transport for initialization request');
+                transportEntry = await createTransportAndServer();
+                // Temporarily store with pending key until session ID is assigned
+                transports.set('__pending__', transportEntry);
+            }
+            else {
+                // No valid session and not an initialization request
+                console.error('[Express] No valid session ID and not an initialization request');
+                res.status(400).json({
+                    jsonrpc: '2.0',
+                    error: {
+                        code: -32000,
+                        message: 'Bad Request: No valid session ID provided',
+                    },
+                    id: null
+                });
+                return;
+            }
+            if (!transportEntry) {
+                console.error('[Express] Failed to get or create transport!');
                 res.status(503).send('Service Unavailable');
                 return;
             }
+            const transport = transportEntry.transport;
             // Log response events
             const originalEnd = res.end;
             const originalWrite = res.write;
@@ -835,11 +878,18 @@ async function startApp() {
                 console.log('[Express] transport.handleRequest returned');
                 console.log('[Express] Response headersSent:', res.headersSent);
                 console.log('[Express] Response finished:', res.finished);
+                // Handle DELETE request cleanup
+                if (req.method === 'DELETE' && existingSessionId) {
+                    console.log('[Express] DELETE request processed, checking if session should be cleaned up');
+                    // The transport's onsessionclosed callback will handle cleanup
+                    // We just need to ensure it happens
+                }
                 // Log request completion timing and track for timing analysis
                 const requestDuration = Date.now() - requestStartTime;
                 console.log('[Express] Request completed in', requestDuration, 'ms');
                 // Track response timestamp for timing analysis
-                if (sessionId && currentRequestBody) {
+                const currentSessionId = existingSessionId || transport.sessionId;
+                if (currentSessionId && currentRequestBody) {
                     try {
                         const parsed = typeof currentRequestBody === 'string' ? JSON.parse(currentRequestBody) : currentRequestBody;
                         if (parsed.method) {
@@ -871,22 +921,21 @@ async function startApp() {
             console.log(`   Health: http://localhost:${port}/healthz`);
             console.log(`   MCP: http://localhost:${port}/mcp`);
             console.log(`   Debug: http://localhost:${port}/debug`);
-            console.log('[Startup] Transport ready:', !!transport);
-            console.log('[Startup] Server ready:', !!server);
+            console.log('[Startup] Transports map ready');
+            console.log('[Startup] Active sessions:', transports.size);
         });
         // Graceful shutdown
         const gracefulShutdown = async (signal) => {
             console.log(`${signal} signal received: closing resources.`);
-            if (server) {
-                console.log('Closing server...');
-                if ('close' in server && typeof server.close === 'function') {
-                    await server.close().catch((e) => console.error('Error closing server:', e));
+            // Close all active transports
+            console.log(`Closing ${transports.size} active transports...`);
+            for (const [sessionId, entry] of transports) {
+                if (sessionId !== '__pending__') {
+                    console.log(`Closing transport for session ${sessionId}...`);
+                    await entry.cleanup().catch((e) => console.error(`Error closing session ${sessionId}:`, e));
                 }
             }
-            if (transport) {
-                console.log('Closing transport...');
-                await transport.close().catch((e) => console.error('Error closing transport:', e));
-            }
+            transports.clear();
             httpServer.close(() => {
                 console.log('HTTP server closed.');
                 process.exit(0);
@@ -897,15 +946,13 @@ async function startApp() {
     }
     catch (error) {
         console.error('[Fatal] Error during startup:', error);
-        if (transport) {
-            await transport.close().catch((e) => console.error('Error closing transport during fatal error:', e));
-        }
-        if (server) {
-            // Server might not have a close method, but we can try
-            if ('close' in server && typeof server.close === 'function') {
-                await server.close().catch((e) => console.error('Error closing server during fatal error:', e));
+        // Clean up any transports that were created
+        for (const [sessionId, entry] of transports) {
+            if (sessionId !== '__pending__') {
+                await entry.cleanup().catch((e) => console.error(`Error closing session ${sessionId} during fatal error:`, e));
             }
         }
+        transports.clear();
         process.exit(1);
     }
 }
