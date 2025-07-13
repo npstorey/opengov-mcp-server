@@ -100,22 +100,30 @@ async function createServer(): Promise<Server> {
   server.setRequestHandler(ListToolsRequestSchema, async (request) => {
     console.log('[Server - ListTools] Request received');
     
-    return {
-      tools: [
-        {
-          name: 'search',
-          description: SEARCH_TOOL.description,
-          parameters: SEARCH_TOOL.parameters,
-          inputSchema: SEARCH_TOOL.parameters,
-        },
-        {
-          name: 'document_retrieval',
-          description: DOCUMENT_RETRIEVAL_TOOL.description,
-          parameters: DOCUMENT_RETRIEVAL_TOOL.parameters,
-          inputSchema: DOCUMENT_RETRIEVAL_TOOL.parameters,
-        },
-      ],
-    };
+    const tools = [
+      {
+        name: 'search',
+        description: SEARCH_TOOL.description,
+        parameters: SEARCH_TOOL.parameters
+      },
+      {
+        name: 'document_retrieval',
+        description: DOCUMENT_RETRIEVAL_TOOL.description,
+        parameters: DOCUMENT_RETRIEVAL_TOOL.parameters
+      }
+    ];
+    
+    // Validate tool sizes to ensure they don't exceed 2KB limit
+    for (const tool of tools) {
+      const size = Buffer.byteLength(JSON.stringify(tool), 'utf8');
+      if (size > 2048) {
+        console.error(`[Server - ListTools] WARNING: Tool ${tool.name} exceeds 2KB limit: ${size} bytes`);
+      } else {
+        console.log(`[Server - ListTools] Tool ${tool.name} size: ${size} bytes (OK)`);
+      }
+    }
+    
+    return { tools };
   });
 
   // Handle ListPrompts
