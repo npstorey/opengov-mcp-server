@@ -142,54 +142,26 @@ async function createServer(transport) {
     server.setRequestHandler(ListToolsRequestSchema, async (request) => {
         console.log('[Server - ListTools] Request received');
         // MCP SPEC COMPLIANCE: Using 'inputSchema' as per latest MCP specification
+        // Single tool design - proven to work better for Claude
         const tools = [
             {
-                name: 'search',
-                description: 'Search NYC Open Data portal and return matching dataset IDs',
-                inputSchema: {
-                    type: 'object',
-                    additionalProperties: false,
-                    properties: {
-                        query: {
-                            type: 'string',
-                            description: 'Search query for full-text search'
-                        }
-                    },
-                    required: ['query']
-                }
-            },
-            {
-                name: 'document_retrieval',
-                description: 'Retrieve dataset information from NYC Open Data portal',
-                inputSchema: {
-                    type: 'object',
-                    additionalProperties: false,
-                    properties: {
-                        ids: {
-                            type: 'array',
-                            items: {
-                                type: 'string'
-                            },
-                            description: 'Array of document IDs to retrieve'
-                        }
-                    },
-                    required: ['ids']
-                }
-            },
-            {
                 name: 'get_data',
-                description: 'Query and analyze data from NYC Open Data portal datasets',
+                description: 'A unified tool to interact with NYC Open Data portal. Use type="catalog" to search datasets, type="metadata" to get dataset info, type="query" to query actual data, or type="metrics" for site metrics.',
                 inputSchema: {
                     type: 'object',
                     properties: {
                         type: {
                             type: 'string',
                             enum: ['catalog', 'metadata', 'query', 'metrics'],
-                            description: 'Operation to perform'
+                            description: 'Operation to perform: catalog (search datasets), metadata (get dataset info), query (get actual data), metrics (site statistics)'
                         },
                         query: {
                             type: 'string',
-                            description: 'General search phrase OR a full SoQL query string. If this is a full SoQL query (e.g., starts with SELECT), other SoQL parameters like select, where, q might be overridden or ignored by the handler in favor of the full SoQL query. If it\'s a search phrase, it will likely be used for a full-text search ($q parameter to Socrata).'
+                            description: 'For catalog: search phrase. For metadata/query: dataset ID. For query: can also be a full SoQL query.'
+                        },
+                        dataset_id: {
+                            type: 'string',
+                            description: 'Dataset ID (e.g., "erm2-nwe9" for 311 data). Used with type="query" to query specific dataset.'
                         },
                         domain: {
                             type: 'string',
@@ -205,38 +177,34 @@ async function createServer(transport) {
                         },
                         select: {
                             type: 'string',
-                            description: 'SoQL SELECT clause'
+                            description: 'SoQL SELECT clause for type="query"'
                         },
                         where: {
                             type: 'string',
-                            description: 'SoQL WHERE clause'
+                            description: 'SoQL WHERE clause for type="query" (e.g., "borough=\'BROOKLYN\' AND created_date >= \'2025-06-01\' AND created_date < \'2025-07-01\'")'
                         },
                         order: {
                             type: 'string',
-                            description: 'SoQL ORDER BY clause'
+                            description: 'SoQL ORDER BY clause for type="query"'
                         },
                         group: {
                             type: 'string',
-                            description: 'SoQL GROUP BY clause'
+                            description: 'SoQL GROUP BY clause for type="query"'
                         },
                         having: {
                             type: 'string',
-                            description: 'SoQL HAVING clause'
-                        },
-                        dataset_id: {
-                            type: 'string',
-                            description: 'Dataset ID (for metadata, column-info, data-access)'
+                            description: 'SoQL HAVING clause for type="query"'
                         },
                         q: {
                             type: 'string',
-                            description: 'Full-text search query within the dataset (used in data access)'
+                            description: 'Full-text search within dataset (for type="query")'
                         }
                     },
                     required: ['type']
                 }
             }
         ];
-        console.log('[Server - ListTools] Returning NYC data tools for Claude compatibility');
+        console.log('[Server - ListTools] Returning single unified get_data tool');
         console.log(`[Server - ListTools] Tool count: ${tools.length}`);
         return { tools };
     });
