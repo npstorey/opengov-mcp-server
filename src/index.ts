@@ -173,6 +173,12 @@ async function createServer(transport?: OpenAICompatibleTransport): Promise<Serv
     
     const tools = [
       {
+        name: 'get_data',
+        title: 'Unified Socrata Access',
+        description: UNIFIED_SOCRATA_TOOL.description,
+        inputSchema: UNIFIED_SOCRATA_TOOL.inputSchema
+      },
+      {
         name: 'search',
         title: 'Search NYC Open Data',
         description: SEARCH_TOOL.description,
@@ -186,7 +192,7 @@ async function createServer(transport?: OpenAICompatibleTransport): Promise<Serv
       }
     ];
     
-    console.log(`[Server - ListTools] Returning ${tools.length} tools: search and fetch`);
+    console.log(`[Server - ListTools] Returning ${tools.length} tools: get_data, search, fetch`);
     
     return { tools };
   });
