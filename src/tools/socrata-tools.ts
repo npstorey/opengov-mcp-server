@@ -561,6 +561,130 @@ export const handleColumnInfoTool = handleColumnInfo;
 export const handleDataAccessTool = handleDataAccess;
 export const handleSiteMetricsTool = handleSiteMetrics;
 
+const STRICT_DATASET_ID_REGEX = /^[a-z0-9]{4}-[a-z0-9]{4}$/i;
+const DATASET_ID_IN_PATH_REGEX = /[a-z0-9]{4}-[a-z0-9]{4}/i;
+
+interface ParsedFetchIdentifier {
+  kind: 'dataset' | 'record';
+  domain: string;
+  datasetId: string;
+  recordId?: string;
+}
+
+function tryParseUrlIdentifier(input: string): ParsedFetchIdentifier | null {
+  try {
+    const url = new URL(input);
+    const datasetMatch = url.pathname.match(DATASET_ID_IN_PATH_REGEX);
+    if (!datasetMatch) {
+      return null;
+    }
+
+    const datasetId = datasetMatch[0].toLowerCase();
+    const domain = url.hostname.toLowerCase();
+
+    let recordId: string | undefined;
+    const rowMatch = url.pathname.match(/row\/(row-[^\/?]+|[^\/?]+)/i);
+    if (rowMatch && rowMatch[1]) {
+      recordId = decodeURIComponent(rowMatch[1]);
+    } else {
+      const recordParam =
+        url.searchParams.get('row_id') ??
+        url.searchParams.get('record_id') ??
+        url.searchParams.get('rowid');
+      if (recordParam) {
+        recordId = recordParam;
+      }
+    }
+
+    return {
+      kind: recordId ? 'record' : 'dataset',
+      domain,
+      datasetId,
+      recordId
+    };
+  } catch {
+    return null;
+  }
+}
+
+function parseFetchIdentifier(rawId: string): ParsedFetchIdentifier {
+  const trimmed = rawId.trim();
+  if (!trimmed) {
+    throw new McpError(ErrorCode.InvalidParams, 'Document ID is required');
+  }
+
+  if (trimmed.startsWith('dataset:') || trimmed.startsWith('record:')) {
+    const parts = trimmed.split(':');
+    const kind = parts[0] as 'dataset' | 'record';
+    const domain = parts[1];
+    const datasetId = parts[2];
+    const recordId = parts[3];
+
+    if (!domain || !datasetId) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        'Fetch identifier must include domain and dataset ID'
+      );
+    }
+
+    if (kind === 'record' && !recordId) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        'Record fetch identifier must include the row identifier'
+      );
+    }
+
+    return {
+      kind,
+      domain: domain.toLowerCase(),
+      datasetId: datasetId.toLowerCase(),
+      recordId
+    };
+  }
+
+  let parsed = tryParseUrlIdentifier(trimmed);
+  if (!parsed && trimmed.includes('/')) {
+    parsed = tryParseUrlIdentifier(`https://${trimmed}`);
+  }
+  if (parsed) {
+    return parsed;
+  }
+
+  if (STRICT_DATASET_ID_REGEX.test(trimmed)) {
+    return {
+      kind: 'dataset',
+      domain: getDefaultDomain(),
+      datasetId: trimmed.toLowerCase()
+    };
+  }
+
+  const colonParts = trimmed.split(':');
+  if (colonParts.length === 2) {
+    const [first, second] = colonParts;
+    if (STRICT_DATASET_ID_REGEX.test(first) && second) {
+      return {
+        kind: 'record',
+        domain: getDefaultDomain(),
+        datasetId: first.toLowerCase(),
+        recordId: second
+      };
+    }
+
+    if ((first.includes('.') || first.includes('localhost')) && STRICT_DATASET_ID_REGEX.test(second)) {
+      return {
+        kind: 'dataset',
+        domain: first.toLowerCase(),
+        datasetId: second.toLowerCase()
+      };
+    }
+  }
+
+  throw new McpError(
+    ErrorCode.InvalidParams,
+    `Unsupported fetch identifier format: ${rawId}`
+  );
+}
+
 // Handler for the new search tool
 export async function handleSearchTool(
   rawParams: SearchToolParams | any
@@ -611,28 +735,14 @@ export async function handleFetchTool(
 ): Promise<{ content: { type: 'text'; text: string }[] }> {
   const { id } = fetchToolZodSchema.parse(rawParams);
 
-  const [kind, domain, datasetId, recordId] = id.split(':');
+  const { kind, domain, datasetId, recordId } = parseFetchIdentifier(id);
 
-  if (kind !== 'dataset' && kind !== 'record') {
-    throw new McpError(
-      ErrorCode.InvalidParams,
-      `Unsupported ID format. Expected prefix "dataset:" or "record:", received ${kind}`
-    );
-  }
-
-  if (!domain || !datasetId) {
-    throw new McpError(
-      ErrorCode.InvalidParams,
-      'Fetch ID must include domain and dataset identifier'
-    );
-  }
-
-  const datasetUrl = `https://${domain}/dataset/${datasetId}`;
+  const resolvedDomain = domain || getDefaultDomain();
 
   if (kind === 'dataset') {
     const metadata = await handleDatasetMetadata({
       datasetId,
-      domain
+      domain: resolvedDomain
     });
 
     const title = (metadata as any)?.name || datasetId;
@@ -652,7 +762,7 @@ export async function handleFetchTool(
       id,
       title,
       text: textSections.join('\n\n') || 'No description available.',
-      url: datasetUrl,
+      url: `https://${resolvedDomain}/dataset/${datasetId}`,
       metadata
     };
 
@@ -677,7 +787,7 @@ export async function handleFetchTool(
   const documents = await retrieveDocuments({
     ids: [recordId],
     datasetId,
-    domain
+    domain: resolvedDomain
   });
 
   const document = documents[0];
@@ -695,10 +805,10 @@ export async function handleFetchTool(
     id,
     title,
     text: JSON.stringify(document, null, 2),
-    url: `${datasetUrl}/row/${recordId}`,
+    url: `${resolvedDomain}/dataset/${datasetId}/row/${recordId}`,
     metadata: {
       datasetId,
-      domain
+      domain: resolvedDomain
     }
   };
 
