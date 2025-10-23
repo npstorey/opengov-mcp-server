@@ -34,8 +34,8 @@ DATA_PORTAL_URL=https://data.cityofnewyork.us
 ### search
 Search for datasets or documents within datasets. Returns ID/score pairs for efficient retrieval.
 
-### document_retrieval
-Retrieve full document content by IDs. Supports batch retrieval and automatic caching.
+### fetch
+Retrieve dataset metadata or specific records using the IDs returned from `search`. Each response follows the OpenAI MCP shape with `id`, `title`, `text`, `url`, and optional `metadata`.
 
 ## Cross-Domain Search Examples
 
@@ -80,7 +80,7 @@ curl -X POST http://localhost:10000/mcp \
     "jsonrpc": "2.0",
     "method": "tools/call",
     "params": {
-      "name": "document_retrieval",
+      "name": "fetch",
       "arguments": {
         "domain": "data.cityofchicago.org",
         "ids": ["ijzp-q8t2:catalog", "6zsd-86xi:catalog"]
@@ -130,7 +130,7 @@ curl -X POST http://localhost:10000/mcp \
     "jsonrpc": "2.0",
     "method": "tools/call",
     "params": {
-      "name": "document_retrieval",
+      "name": "fetch",
       "arguments": {
         "dataset_id": "ijzp-q8t2",
         "domain": "data.cityofchicago.org",
@@ -174,7 +174,7 @@ When searching without a dataset ID, results use encoded IDs:
 - Regular records: `dataset_id:row_id`
 - Row-based records: `row_N` (where N is the row index)
 
-The document_retrieval tool automatically parses these encoded IDs.
+The fetch tool automatically parses these encoded IDs.
 
 ## Popular Open Data Portals
 

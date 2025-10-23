@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { SEARCH_TOOL, DOCUMENT_RETRIEVAL_TOOL } from '../tools/socrata-tools.js';
+import { SEARCH_TOOL, FETCH_TOOL } from '../tools/socrata-tools.js';
 
 describe('OpenAI MCP Integration', () => {
   it('should return tools with inputSchema field for OpenAI compatibility', () => {
@@ -10,13 +10,13 @@ describe('OpenAI MCP Integration', () => {
           name: 'search',
           title: 'Search Socrata Datasets',
           description: SEARCH_TOOL.description,
-          inputSchema: { ...SEARCH_TOOL.parameters }
+          inputSchema: { ...SEARCH_TOOL.inputSchema }
         },
         {
-          name: 'document_retrieval',
-          title: 'Retrieve Documents',
-          description: DOCUMENT_RETRIEVAL_TOOL.description,
-          inputSchema: { ...DOCUMENT_RETRIEVAL_TOOL.parameters }
+          name: 'fetch',
+          title: 'Fetch Documents',
+          description: FETCH_TOOL.description,
+          inputSchema: { ...FETCH_TOOL.inputSchema }
         }
       ]
     };
@@ -34,15 +34,15 @@ describe('OpenAI MCP Integration', () => {
     expect(searchTool.inputSchema.properties).toBeDefined();
     expect(searchTool.inputSchema.required).toEqual(['query']);
     
-    // Check second tool (document_retrieval)
-    const docTool = toolsListResponse.tools[1];
-    expect(docTool.name).toBe('document_retrieval');
-    expect(docTool.title).toBe('Retrieve Documents');
-    expect(docTool.description).toBeTruthy();
-    expect(docTool.inputSchema).toBeDefined();
-    expect(docTool.inputSchema.type).toBe('object');
-    expect(docTool.inputSchema.properties).toBeDefined();
-    expect(docTool.inputSchema.required).toEqual(['ids']);
+    // Check second tool (fetch)
+    const fetchTool = toolsListResponse.tools[1];
+    expect(fetchTool.name).toBe('fetch');
+    expect(fetchTool.title).toBe('Fetch Documents');
+    expect(fetchTool.description).toBeTruthy();
+    expect(fetchTool.inputSchema).toBeDefined();
+    expect(fetchTool.inputSchema.type).toBe('object');
+    expect(fetchTool.inputSchema.properties).toBeDefined();
+    expect(fetchTool.inputSchema.required).toEqual(['id']);
   });
 
   it('should validate tool sizes are under 2KB limit', () => {
@@ -51,13 +51,13 @@ describe('OpenAI MCP Integration', () => {
         name: 'search',
         title: 'Search Socrata Datasets',
         description: SEARCH_TOOL.description,
-        inputSchema: { ...SEARCH_TOOL.parameters }
+        inputSchema: { ...SEARCH_TOOL.inputSchema }
       },
       {
-        name: 'document_retrieval',
-        title: 'Retrieve Documents',
-        description: DOCUMENT_RETRIEVAL_TOOL.description,
-        inputSchema: { ...DOCUMENT_RETRIEVAL_TOOL.parameters }
+        name: 'fetch',
+        title: 'Fetch Documents',
+        description: FETCH_TOOL.description,
+        inputSchema: { ...FETCH_TOOL.inputSchema }
       }
     ];
 

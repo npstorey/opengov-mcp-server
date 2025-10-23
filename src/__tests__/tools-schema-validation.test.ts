@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { SEARCH_TOOL, DOCUMENT_RETRIEVAL_TOOL } from '../tools/socrata-tools.js';
+import { SEARCH_TOOL, FETCH_TOOL } from '../tools/socrata-tools.js';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 
@@ -14,7 +14,7 @@ describe('Tools Schema Validation', () => {
     addFormats(ajv);
 
     // Test search tool
-    const searchParams = { ...SEARCH_TOOL.parameters };
+    const searchParams = { ...SEARCH_TOOL.inputSchema };
     
     // Check that search tool has required field with only query
     expect(searchParams.required).toEqual(['query']);
@@ -22,7 +22,7 @@ describe('Tools Schema Validation', () => {
     // Validate schema
     const searchSchemaDoc = {
       $schema: 'http://json-schema.org/draft-07/schema#',
-      ...searchParams
+      ...SEARCH_TOOL.inputSchema
     };
     
     const searchValid = ajv.validateSchema(searchSchemaDoc);
@@ -35,35 +35,35 @@ describe('Tools Schema Validation', () => {
     const searchSize = Buffer.byteLength(JSON.stringify({
       name: SEARCH_TOOL.name,
       description: SEARCH_TOOL.description,
-      parameters: searchParams
+      inputSchema: SEARCH_TOOL.inputSchema
     }), 'utf8');
     expect(searchSize).toBeLessThanOrEqual(2048);
     
-    // Test document_retrieval tool
-    const docParams = { ...DOCUMENT_RETRIEVAL_TOOL.parameters };
+    // Test fetch tool
+    const fetchParams = { ...FETCH_TOOL.inputSchema };
     
-    // Check that document_retrieval has required field
-    expect(docParams.required).toEqual(['ids']);
+    // Check that fetch has required field
+    expect(fetchParams.required).toEqual(['id']);
     
     // Validate schema
-    const docSchemaDoc = {
+    const fetchSchemaDoc = {
       $schema: 'http://json-schema.org/draft-07/schema#',
-      ...docParams
+      ...FETCH_TOOL.inputSchema
     };
     
-    const docValid = ajv.validateSchema(docSchemaDoc);
-    if (!docValid) {
-      console.error('Document retrieval tool schema validation errors:', ajv.errors);
+    const fetchValid = ajv.validateSchema(fetchSchemaDoc);
+    if (!fetchValid) {
+      console.error('Fetch tool schema validation errors:', ajv.errors);
     }
-    expect(docValid).toBe(true);
+    expect(fetchValid).toBe(true);
     
     // Check size
-    const docSize = Buffer.byteLength(JSON.stringify({
-      name: DOCUMENT_RETRIEVAL_TOOL.name,
-      description: DOCUMENT_RETRIEVAL_TOOL.description,
-      parameters: docParams
+    const fetchSize = Buffer.byteLength(JSON.stringify({
+      name: FETCH_TOOL.name,
+      description: FETCH_TOOL.description,
+      inputSchema: FETCH_TOOL.inputSchema
     }), 'utf8');
-    expect(docSize).toBeLessThanOrEqual(2048);
+    expect(fetchSize).toBeLessThanOrEqual(2048);
   });
 
   it('should filter empty required arrays in runtime', () => {
@@ -71,7 +71,7 @@ describe('Tools Schema Validation', () => {
     const testTool = {
       name: 'test',
       description: 'test',
-      parameters: {
+      inputSchema: {
         type: 'object',
         properties: {},
         required: []
@@ -79,12 +79,12 @@ describe('Tools Schema Validation', () => {
     };
     
     // Simulate the filtering logic from index.ts
-    if (testTool.parameters.required && Array.isArray(testTool.parameters.required) && testTool.parameters.required.length === 0) {
-      const { required, ...rest } = testTool.parameters;
-      testTool.parameters = rest;
+    if (testTool.inputSchema.required && Array.isArray(testTool.inputSchema.required) && testTool.inputSchema.required.length === 0) {
+      const { required, ...rest } = testTool.inputSchema;
+      testTool.inputSchema = rest;
     }
     
-    expect(testTool.parameters.required).toBeUndefined();
+    expect(testTool.inputSchema.required).toBeUndefined();
   });
 
   it('should validate against JSON Schema draft-2020-12 and fail if required is empty or missing', () => {
@@ -98,23 +98,23 @@ describe('Tools Schema Validation', () => {
 
     // Test that search tool with required array validates correctly
     const searchSchema = {
-      ...SEARCH_TOOL.parameters
+      ...SEARCH_TOOL.inputSchema
     };
     
     const searchValid = ajv2020.validateSchema(searchSchema);
     expect(searchValid).toBe(true);
-    expect(SEARCH_TOOL.parameters.required).toBeDefined();
-    expect(SEARCH_TOOL.parameters.required.length).toBeGreaterThan(0);
+    expect(SEARCH_TOOL.inputSchema.required).toBeDefined();
+    expect(SEARCH_TOOL.inputSchema.required.length).toBeGreaterThan(0);
 
-    // Test that document_retrieval tool with required array validates correctly
-    const docSchema = {
-      ...DOCUMENT_RETRIEVAL_TOOL.parameters
+    // Test that fetch tool with required array validates correctly
+    const fetchSchema = {
+      ...FETCH_TOOL.inputSchema
     };
     
-    const docValid = ajv2020.validateSchema(docSchema);
-    expect(docValid).toBe(true);
-    expect(DOCUMENT_RETRIEVAL_TOOL.parameters.required).toBeDefined();
-    expect(DOCUMENT_RETRIEVAL_TOOL.parameters.required.length).toBeGreaterThan(0);
+    const fetchValid2020 = ajv2020.validateSchema(fetchSchema);
+    expect(fetchValid2020).toBe(true);
+    expect(FETCH_TOOL.inputSchema.required).toBeDefined();
+    expect(FETCH_TOOL.inputSchema.required.length).toBeGreaterThan(0);
 
     // Test that a tool without required array would fail our expectations
     const invalidTool = {
@@ -151,13 +151,13 @@ describe('Tools Schema Validation', () => {
         name: 'search',
         title: 'Search Socrata Datasets',
         description: SEARCH_TOOL.description,
-        inputSchema: { ...SEARCH_TOOL.parameters }
+        inputSchema: { ...SEARCH_TOOL.inputSchema }
       },
       {
-        name: 'document_retrieval',
-        title: 'Retrieve Documents',
-        description: DOCUMENT_RETRIEVAL_TOOL.description,
-        inputSchema: { ...DOCUMENT_RETRIEVAL_TOOL.parameters }
+        name: 'fetch',
+        title: 'Fetch Documents',
+        description: FETCH_TOOL.description,
+        inputSchema: { ...FETCH_TOOL.inputSchema }
       }
     ];
     
@@ -173,7 +173,7 @@ describe('Tools Schema Validation', () => {
     // Verify search tool has minimal required array
     expect(tools[0].inputSchema.required).toEqual(['query']);
     
-    // Verify document_retrieval has correct required array
-    expect(tools[1].inputSchema.required).toEqual(['ids']);
+    // Verify fetch has correct required array
+    expect(tools[1].inputSchema.required).toEqual(['id']);
   });
 });

@@ -69,7 +69,7 @@ curl -X POST http://localhost:10000/mcp \
 
 Expected response shows two tools:
 - `search`: Returns array of {id, score} pairs
-- `document_retrieval`: Returns array of full documents
+- `fetch`: Returns a single document object with `id`, `title`, `text`, `url`, and optional `metadata`
 
 ### 5. Call Search Tool (use session ID from step 1)
 ```bash
@@ -105,7 +105,7 @@ curl -X POST http://localhost:10000/mcp \
     "method": "tools/call",
     "id": 5,
     "params": {
-      "name": "document_retrieval",
+      "name": "fetch",
       "arguments": {
         "datasetId": "8k4n-qdj6",
         "ids": ["row_0", "row_1", "row_2"]
