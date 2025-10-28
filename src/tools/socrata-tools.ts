@@ -285,7 +285,7 @@ export const socrataToolZodSchema = z.object({
          .describe('General search phrase OR a full SoQL query string. If this is a full SoQL query (e.g., starts with SELECT), other SoQL parameters like select, where, q might be overridden or ignored by the handler in favor of the full SoQL query. If it\'s a search phrase, it will likely be used for a full-text search ($q parameter to Socrata).'),
   // Optional parameters - these should also be in jsonParameters if they are to be exposed to the client
   domain: z.string().optional().describe('The Socrata domain (e.g., data.cityofnewyork.us)'),
-  limit: z.union([z.number().int().positive(), z.literal('all')]).optional().describe('Number of results to return, or "all" to fetch all available data up to configured cap'),
+  limit: z.union([z.coerce.number().int().positive(), z.literal('all')]).optional().describe('Number of results to return, or "all" to fetch all available data up to configured cap'),
   offset: z.number().int().nonnegative().optional().describe('Offset for pagination'),
   select: z.string().optional().describe('SoQL SELECT clause'),
   where: z.string().optional().describe('SoQL WHERE clause'),
