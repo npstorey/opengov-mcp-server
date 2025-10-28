@@ -5,7 +5,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import crypto from 'crypto';
-import { UNIFIED_SOCRATA_TOOL, socrataToolZodSchema, searchToolZodSchema, documentRetrievalZodSchema, handleSearchTool, handleDocumentRetrievalTool } from './tools/socrata-tools.js';
+import { UNIFIED_SOCRATA_TOOL, SEARCH_TOOL, FETCH_TOOL, socrataToolZodSchema, searchToolZodSchema, fetchToolZodSchema, handleSearchTool, handleFetchTool } from './tools/socrata-tools.js';
 import { z } from 'zod';
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 // Workaround: Define schemas locally since they're not properly exported from SDK
@@ -141,71 +141,27 @@ async function createServer(transport) {
     // Handle ListTools
     server.setRequestHandler(ListToolsRequestSchema, async (request) => {
         console.log('[Server - ListTools] Request received');
-        // MCP SPEC COMPLIANCE: Using 'inputSchema' as per latest MCP specification
-        // Single tool design - proven to work better for Claude
         const tools = [
             {
                 name: 'get_data',
-                description: 'A unified tool to interact with NYC Open Data portal. Use type="catalog" to search datasets, type="metadata" to get dataset info, type="query" to query actual data, or type="metrics" for site metrics.',
-                inputSchema: {
-                    type: 'object',
-                    properties: {
-                        type: {
-                            type: 'string',
-                            enum: ['catalog', 'metadata', 'query', 'metrics'],
-                            description: 'Operation to perform: catalog (search datasets), metadata (get dataset info), query (get actual data), metrics (site statistics)'
-                        },
-                        query: {
-                            type: 'string',
-                            description: 'For catalog: search phrase. For metadata/query: dataset ID. For query: can also be a full SoQL query.'
-                        },
-                        dataset_id: {
-                            type: 'string',
-                            description: 'Dataset ID (e.g., "erm2-nwe9" for 311 data). Used with type="query" to query specific dataset.'
-                        },
-                        domain: {
-                            type: 'string',
-                            description: 'The Socrata domain (e.g., data.cityofnewyork.us)'
-                        },
-                        limit: {
-                            type: 'string',
-                            description: 'Number of results to return (e.g., "10", "100"), or "all" to fetch all available data'
-                        },
-                        offset: {
-                            type: 'integer',
-                            description: 'Offset for pagination'
-                        },
-                        select: {
-                            type: 'string',
-                            description: 'SoQL SELECT clause for type="query"'
-                        },
-                        where: {
-                            type: 'string',
-                            description: 'SoQL WHERE clause for type="query" (e.g., "borough=\'BROOKLYN\' AND created_date >= \'2025-06-01\' AND created_date < \'2025-07-01\'")'
-                        },
-                        order: {
-                            type: 'string',
-                            description: 'SoQL ORDER BY clause for type="query"'
-                        },
-                        group: {
-                            type: 'string',
-                            description: 'SoQL GROUP BY clause for type="query"'
-                        },
-                        having: {
-                            type: 'string',
-                            description: 'SoQL HAVING clause for type="query"'
-                        },
-                        q: {
-                            type: 'string',
-                            description: 'Full-text search within dataset (for type="query")'
-                        }
-                    },
-                    required: ['type']
-                }
+                title: 'Unified Socrata Access',
+                description: UNIFIED_SOCRATA_TOOL.description,
+                inputSchema: UNIFIED_SOCRATA_TOOL.inputSchema
+            },
+            {
+                name: 'search',
+                title: 'Search NYC Open Data',
+                description: SEARCH_TOOL.description,
+                inputSchema: SEARCH_TOOL.inputSchema
+            },
+            {
+                name: 'fetch',
+                title: 'Fetch NYC Data Document',
+                description: FETCH_TOOL.description,
+                inputSchema: FETCH_TOOL.inputSchema
             }
         ];
-        console.log('[Server - ListTools] Returning single unified get_data tool');
-        console.log(`[Server - ListTools] Tool count: ${tools.length}`);
+        console.log(`[Server - ListTools] Returning ${tools.length} tools: get_data, search, fetch`);
         return { tools };
     });
     // Handle ListPrompts
@@ -439,7 +395,7 @@ https://data.cityofnewyork.us/resource/{dataset-id}.{format}
         }
         const toolName = request.params.name;
         const toolArgs = request.params.arguments;
-        // Handle search tool (restored for Claude compatibility)
+        // Handle search tool
         if (toolName === 'search') {
             try {
                 console.log(`[Server] Calling search tool with args:`, JSON.stringify(toolArgs, null, 2));
@@ -448,7 +404,7 @@ https://data.cityofnewyork.us/resource/{dataset-id}.{format}
                 const result = await handleSearchTool(parsed);
                 console.log('[Tool] Search result:', JSON.stringify(result, null, 2));
                 return {
-                    content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+                    content: result.content,
                     isError: false
                 };
             }
@@ -460,16 +416,16 @@ https://data.cityofnewyork.us/resource/{dataset-id}.{format}
                 throw error;
             }
         }
-        // Handle document retrieval tool
-        if (toolName === 'document_retrieval') {
+        // Handle fetch tool
+        if (toolName === 'fetch') {
             try {
-                console.log(`[Server] Calling document_retrieval tool with args:`, JSON.stringify(toolArgs, null, 2));
-                const parsed = documentRetrievalZodSchema.parse(toolArgs);
-                console.log(`[Server] Parsed document retrieval params:`, JSON.stringify(parsed, null, 2));
-                const result = await handleDocumentRetrievalTool(parsed);
-                console.log('[Tool] Document retrieval result:', JSON.stringify(result, null, 2));
+                console.log(`[Server] Calling fetch tool with args:`, JSON.stringify(toolArgs, null, 2));
+                const parsed = fetchToolZodSchema.parse(toolArgs);
+                console.log(`[Server] Parsed fetch params:`, JSON.stringify(parsed, null, 2));
+                const result = await handleFetchTool(parsed);
+                console.log('[Tool] Fetch result:', JSON.stringify(result, null, 2));
                 return {
-                    content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+                    content: result.content,
                     isError: false
                 };
             }

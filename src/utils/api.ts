@@ -41,11 +41,6 @@ function buildSoda3Payload(params: Record<string, unknown>): Record<string, unkn
     payload.query = sql;
   }
 
-  const search = typeof params.$q === 'string' ? params.$q.trim() : '';
-  if (search) {
-    payload.search = { search };
-  }
-
   if (params.$limit !== undefined || params.$offset !== undefined) {
     payload.page = {
       pageSize: clampPageSize(params.$limit),
@@ -53,11 +48,8 @@ function buildSoda3Payload(params: Record<string, unknown>): Record<string, unkn
     };
   }
 
-  const includeMetadata = typeof params.includeMetadata === 'boolean' ? params.includeMetadata : true;
-  payload.includeMetadata = includeMetadata;
-
-  if (typeof params.includeLabels === 'boolean') {
-    payload.includeLabels = params.includeLabels;
+  if (typeof params.format === 'string' && params.format.trim().length > 0) {
+    payload.format = params.format.trim();
   }
 
   return payload;

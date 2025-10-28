@@ -1,7 +1,7 @@
 /**
- * Helper function to make API requests to Socrata endpoints
+ * Helper function to make API requests to Socrata SODA3 endpoints
  */
-export declare function fetchFromSocrataApi<T>(path: string, params?: Record<string, unknown>, baseUrl?: string | undefined): Promise<T>;
+export declare function fetchFromSocrataApi<T>(path: string, params?: Record<string, unknown>, baseUrl?: string): Promise<T>;
 /**
  * Common types for Socrata API responses
  */

@@ -2,8 +2,7 @@ import { z } from 'zod';
 import { McpError, ErrorCode } from '../utils/mcp-errors.js';
 import { fetchFromSocrataApi } from '../utils/api.js';
 import { handleSearch } from './search.js';
-import { searchIds } from './search-ids.js';
-import { retrieveDocuments, retrieveAllDocuments } from './document-retrieval.js';
+import { retrieveDocuments } from './document-retrieval.js';
 // import { McpToolHandlerContext } from '@modelcontextprotocol/sdk/types.js'; // Removed incorrect import
 // Get the default domain from environment
 const getDefaultDomain = () => {
@@ -145,20 +144,13 @@ async function handleSiteMetrics(params) {
     return response;
 }
 // Zod schemas for different tool types
-// Search tool schema - returns only id/score pairs
+// Search tool schema - matches OpenAI requirements (single query string)
 export const searchToolZodSchema = z.object({
-    dataset_id: z.string().optional().describe('Dataset ID to search within. If omitted, searches across all datasets'),
-    domain: z.string().optional().describe('The Socrata domain (e.g., data.cityofnewyork.us)'),
-    query: z.string().optional().describe('Search query for full-text search'),
-    where: z.string().optional().describe('SoQL WHERE clause'),
-    limit: z.number().int().positive().optional().describe('Number of results to return'),
-    offset: z.number().int().nonnegative().optional().describe('Offset for pagination')
+    query: z.string().min(1, 'Query is required').describe('Search query string')
 });
-// Document retrieval tool schema - fetches full documents by IDs
-export const documentRetrievalZodSchema = z.object({
-    ids: z.array(z.string()).describe('Array of document IDs to retrieve. IDs can be encoded as "dataset_id:row_id"'),
-    dataset_id: z.string().optional().describe('Dataset ID to retrieve documents from. Can be omitted if IDs are encoded'),
-    domain: z.string().optional().describe('The Socrata domain (e.g., data.cityofnewyork.us)')
+// Fetch tool schema - matches OpenAI requirements (single ID string)
+export const fetchToolZodSchema = z.object({
+    id: z.string().min(1, 'Document ID is required').describe('Identifier returned from the search tool')
 });
 // 1️⃣ Zod definition for the Socrata tool's parameters.
 // This is used by the MCP SDK to parse/validate parameters from the client.
@@ -169,7 +161,7 @@ export const socrataToolZodSchema = z.object({
         .describe('General search phrase OR a full SoQL query string. If this is a full SoQL query (e.g., starts with SELECT), other SoQL parameters like select, where, q might be overridden or ignored by the handler in favor of the full SoQL query. If it\'s a search phrase, it will likely be used for a full-text search ($q parameter to Socrata).'),
     // Optional parameters - these should also be in jsonParameters if they are to be exposed to the client
     domain: z.string().optional().describe('The Socrata domain (e.g., data.cityofnewyork.us)'),
-    limit: z.union([z.number().int().positive(), z.literal('all')]).optional().describe('Number of results to return, or "all" to fetch all available data up to configured cap'),
+    limit: z.union([z.coerce.number().int().positive(), z.literal('all')]).optional().describe('Number of results to return, or "all" to fetch all available data up to configured cap'),
     offset: z.number().int().nonnegative().optional().describe('Offset for pagination'),
     select: z.string().optional().describe('SoQL SELECT clause'),
     where: z.string().optional().describe('SoQL WHERE clause'),
@@ -249,19 +241,16 @@ const searchJsonParameters = {
     },
     required: ['query']
 };
-const documentRetrievalJsonParameters = {
+const fetchJsonParameters = {
     type: 'object',
     additionalProperties: false,
     properties: {
-        ids: {
-            type: 'array',
-            items: {
-                type: 'string'
-            },
-            description: 'Array of document IDs to retrieve'
+        id: {
+            type: 'string',
+            description: 'Identifier returned by the search tool'
         }
     },
-    required: ['ids']
+    required: ['id']
 };
 // 3️⃣ Tool uses the manually crafted JSON schema
 export const UNIFIED_SOCRATA_TOOL = {
@@ -281,12 +270,12 @@ export const SEARCH_TOOL = {
     handler: handleSearchTool
 };
 // New document retrieval tool
-export const DOCUMENT_RETRIEVAL_TOOL = {
-    name: 'document_retrieval',
-    title: 'Retrieve NYC Data',
-    description: 'Retrieve dataset information from NYC Open Data portal',
-    inputSchema: documentRetrievalJsonParameters, // Latest MCP spec uses 'inputSchema'
-    handler: handleDocumentRetrievalTool
+export const FETCH_TOOL = {
+    name: 'fetch',
+    title: 'Fetch NYC Data Document',
+    description: 'Retrieve full dataset metadata or record content from NYC Open Data portal',
+    inputSchema: fetchJsonParameters,
+    handler: handleFetchTool
 };
 // Main handler function that dispatches to specific handlers based on type
 // It now expects parameters already parsed by the MCP SDK according to socrataToolZodSchema.
@@ -367,10 +356,9 @@ export async function handleSocrataTool(rawParams
                 passAsQ = queryField;
                 console.log('[handleSocrataTool] Treating "query" field as general search term mapped to $q parameter.');
             }
-            // Use the new search handler which includes metadata
             return handleSearch({
                 datasetId: effectiveDatasetId,
-                domain: domainField,
+                domain: domainField || getDefaultDomain(),
                 soqlQuery: passAsSoqlQuery,
                 limit: limitField,
                 offset: offsetField,
@@ -415,162 +403,205 @@ export const handleDatasetMetadataTool = handleDatasetMetadata;
 export const handleColumnInfoTool = handleColumnInfo;
 export const handleDataAccessTool = handleDataAccess;
 export const handleSiteMetricsTool = handleSiteMetrics;
-// Helper function to provide backward compatibility for parameter names
-function mapSearchParams(params) {
-    return {
-        dataset_id: params.dataset_id || params.datasetId,
-        domain: params.domain,
-        query: params.query,
-        where: params.where,
-        limit: params.limit,
-        offset: params.offset
-    };
+const STRICT_DATASET_ID_REGEX = /^[a-z0-9]{4}-[a-z0-9]{4}$/i;
+const DATASET_ID_IN_PATH_REGEX = /[a-z0-9]{4}-[a-z0-9]{4}/i;
+function tryParseUrlIdentifier(input) {
+    try {
+        const url = new URL(input);
+        const datasetMatch = url.pathname.match(DATASET_ID_IN_PATH_REGEX);
+        if (!datasetMatch) {
+            return null;
+        }
+        const datasetId = datasetMatch[0].toLowerCase();
+        const domain = url.hostname.toLowerCase();
+        let recordId;
+        const rowMatch = url.pathname.match(/row\/(row-[^\/?]+|[^\/?]+)/i);
+        if (rowMatch && rowMatch[1]) {
+            recordId = decodeURIComponent(rowMatch[1]);
+        }
+        else {
+            const recordParam = url.searchParams.get('row_id') ??
+                url.searchParams.get('record_id') ??
+                url.searchParams.get('rowid');
+            if (recordParam) {
+                recordId = recordParam;
+            }
+        }
+        return {
+            kind: recordId ? 'record' : 'dataset',
+            domain,
+            datasetId,
+            recordId
+        };
+    }
+    catch {
+        return null;
+    }
+}
+function parseFetchIdentifier(rawId) {
+    const trimmed = rawId.trim();
+    if (!trimmed) {
+        throw new McpError(ErrorCode.InvalidParams, 'Document ID is required');
+    }
+    if (trimmed.startsWith('dataset:') || trimmed.startsWith('record:')) {
+        const parts = trimmed.split(':');
+        const kind = parts[0];
+        const domain = parts[1];
+        const datasetId = parts[2];
+        const recordId = parts[3];
+        if (!domain || !datasetId) {
+            throw new McpError(ErrorCode.InvalidParams, 'Fetch identifier must include domain and dataset ID');
+        }
+        if (kind === 'record' && !recordId) {
+            throw new McpError(ErrorCode.InvalidParams, 'Record fetch identifier must include the row identifier');
+        }
+        return {
+            kind,
+            domain: domain.toLowerCase(),
+            datasetId: datasetId.toLowerCase(),
+            recordId
+        };
+    }
+    let parsed = tryParseUrlIdentifier(trimmed);
+    if (!parsed && trimmed.includes('/')) {
+        parsed = tryParseUrlIdentifier(`https://${trimmed}`);
+    }
+    if (parsed) {
+        return parsed;
+    }
+    if (STRICT_DATASET_ID_REGEX.test(trimmed)) {
+        return {
+            kind: 'dataset',
+            domain: getDefaultDomain(),
+            datasetId: trimmed.toLowerCase()
+        };
+    }
+    const colonParts = trimmed.split(':');
+    if (colonParts.length === 2) {
+        const [first, second] = colonParts;
+        if (STRICT_DATASET_ID_REGEX.test(first) && second) {
+            return {
+                kind: 'record',
+                domain: getDefaultDomain(),
+                datasetId: first.toLowerCase(),
+                recordId: second
+            };
+        }
+        if ((first.includes('.') || first.includes('localhost')) && STRICT_DATASET_ID_REGEX.test(second)) {
+            return {
+                kind: 'dataset',
+                domain: first.toLowerCase(),
+                datasetId: second.toLowerCase()
+            };
+        }
+    }
+    throw new McpError(ErrorCode.InvalidParams, `Unsupported fetch identifier format: ${rawId}`);
 }
 // Handler for the new search tool
 export async function handleSearchTool(rawParams) {
-    // Map old parameter names to new ones for backward compatibility
-    const params = mapSearchParams(rawParams);
-    // Ensure default domain if not provided
-    const domain = params.domain || getDefaultDomain();
-    // If no dataset_id provided, search catalog
-    if (!params.dataset_id) {
-        console.log('[SearchTool] No dataset_id provided, searching catalog');
-        // Search catalog and return dataset IDs as results
-        const catalogResults = await handleCatalog({
-            query: params.query,
-            domain,
-            limit: params.limit || 10,
-            offset: params.offset || 0
-        });
-        // Convert catalog results to search results with encoded dataset IDs
-        const searchResults = catalogResults.map((dataset, index) => {
-            // Handle nested structure from catalog API
-            const datasetId = dataset.resource?.id || dataset.id;
-            return {
-                id: `${datasetId}:catalog`, // Encode as datasetId:catalog to indicate this is a dataset result
-                score: 1.0 - (index * 0.1) // Simple scoring based on order
-            };
-        });
-        return searchResults;
-    }
-    // Otherwise search within the specified dataset
-    return searchIds({
-        datasetId: params.dataset_id,
+    const { query } = searchToolZodSchema.parse(rawParams);
+    const domain = getDefaultDomain();
+    const catalogResults = await handleCatalog({
+        query,
         domain,
-        query: params.query,
-        where: params.where,
-        limit: params.limit,
-        offset: params.offset
+        limit: 10,
+        offset: 0
     });
-}
-// Helper function to provide backward compatibility for document retrieval params
-function mapDocumentRetrievalParams(params) {
+    const results = catalogResults.map((dataset) => {
+        const datasetId = dataset.resource?.id || dataset.id;
+        const title = dataset.resource?.name || dataset.name || datasetId;
+        const description = dataset.resource?.description || dataset.description || '';
+        const encodedId = `dataset:${domain}:${datasetId}`;
+        const url = `https://${domain}/dataset/${datasetId}`;
+        return {
+            id: encodedId,
+            title,
+            url,
+            snippet: typeof description === 'string' ? description.slice(0, 200) : undefined
+        };
+    });
+    const responsePayload = {
+        results
+    };
     return {
-        ids: params.ids,
-        dataset_id: params.dataset_id || params.datasetId,
-        domain: params.domain
+        content: [
+            {
+                type: 'text',
+                text: JSON.stringify(responsePayload)
+            }
+        ]
     };
 }
-// Handler for the new document retrieval tool
-export async function handleDocumentRetrievalTool(rawParams) {
-    // Map old parameter names to new ones for backward compatibility
-    const params = mapDocumentRetrievalParams(rawParams);
-    // Ensure default domain if not provided
-    const domain = params.domain || getDefaultDomain();
-    // If no IDs provided, retrieve all documents with default limits
-    if (!params.ids || params.ids.length === 0) {
-        if (!params.dataset_id) {
-            throw new McpError(ErrorCode.InvalidParams, 'Either ids or dataset_id must be provided');
-        }
-        return retrieveAllDocuments({
-            datasetId: params.dataset_id,
-            domain
+// Helper function to provide backward compatibility for document retrieval params
+export async function handleFetchTool(rawParams) {
+    const { id } = fetchToolZodSchema.parse(rawParams);
+    const { kind, domain, datasetId, recordId } = parseFetchIdentifier(id);
+    const resolvedDomain = domain || getDefaultDomain();
+    if (kind === 'dataset') {
+        const metadata = await handleDatasetMetadata({
+            datasetId,
+            domain: resolvedDomain
         });
-    }
-    // Parse encoded IDs to extract dataset_id if needed
-    let effectiveDatasetId = params.dataset_id;
-    const decodedIds = [];
-    // Check if this is a catalog metadata request
-    const isCatalogRequest = params.ids.some(id => id.endsWith(':catalog'));
-    if (isCatalogRequest) {
-        // Extract dataset IDs from the encoded IDs
-        const datasetIds = params.ids
-            .filter(id => id.endsWith(':catalog'))
-            .map(id => id.replace(':catalog', ''));
-        console.log('[DocumentRetrieval] Fetching catalog info for datasets:', datasetIds);
-        // For catalog requests, return concise catalog information
-        // We'll fetch all catalog results and filter for the requested IDs
-        const catalogResults = await handleCatalog({
-            domain,
-            limit: 100, // Fetch more to ensure we find all requested datasets
-            offset: 0
-        });
-        // Filter to only include the requested datasets
-        const requestedDatasets = catalogResults.filter((dataset) => datasetIds.includes(dataset.id));
-        // If some datasets weren't found in the first batch, try searching for them individually
-        const foundIds = requestedDatasets.map((d) => d.id);
-        const missingIds = datasetIds.filter(id => !foundIds.includes(id));
-        for (const missingId of missingIds) {
-            try {
-                // Search specifically for this dataset ID
-                const searchResults = await handleCatalog({
-                    query: missingId,
-                    domain,
-                    limit: 10,
-                    offset: 0
-                });
-                // Find exact match
-                const exactMatch = searchResults.find((d) => d.id === missingId);
-                if (exactMatch) {
-                    requestedDatasets.push(exactMatch);
+        const title = metadata?.name || datasetId;
+        const description = metadata?.description || metadata?.resource?.description || '';
+        const columns = Array.isArray(metadata?.columns)
+            ? metadata?.columns
+            : undefined;
+        const textSections = [
+            typeof description === 'string' && description.trim().length > 0 ? `Description:\n${description.trim()}` : undefined,
+            columns && columns.length > 0
+                ? `Columns:\n${columns.map(col => `- ${col.name}${col.dataTypeName ? ` (${col.dataTypeName})` : ''}`).join('\n')}`
+                : undefined
+        ].filter(Boolean);
+        const responseObject = {
+            id,
+            title,
+            text: textSections.join('\n\n') || 'No description available.',
+            url: `https://${resolvedDomain}/dataset/${datasetId}`,
+            metadata
+        };
+        return {
+            content: [
+                {
+                    type: 'text',
+                    text: JSON.stringify(responseObject)
                 }
-            }
-            catch (error) {
-                console.error(`Failed to find dataset ${missingId}:`, error);
-                // Include a minimal dataset info with error indication
-                requestedDatasets.push({
-                    id: missingId,
-                    name: `Dataset ${missingId} (not found)`,
-                    description: error instanceof Error ? error.message : 'Dataset not found',
-                    datasetType: 'error',
-                    category: 'Error',
-                    tags: ['error', 'not-found'],
-                    error: true
-                });
-            }
-        }
-        return requestedDatasets;
+            ]
+        };
     }
-    // Otherwise, handle regular document retrieval
-    for (const id of params.ids) {
-        if (id.includes(':')) {
-            // This is an encoded ID: datasetId:rowId
-            const [encodedDatasetId, rowId] = id.split(':', 2);
-            // If we don't have a datasetId yet, use the one from the encoded ID
-            if (!effectiveDatasetId) {
-                effectiveDatasetId = encodedDatasetId;
-            }
-            else if (effectiveDatasetId !== encodedDatasetId) {
-                // All IDs must be from the same dataset
-                throw new McpError(ErrorCode.InvalidParams, `Mixed dataset IDs not supported. Found ${encodedDatasetId} but expected ${effectiveDatasetId}`);
-            }
-            decodedIds.push(rowId);
-        }
-        else {
-            // Regular ID
-            decodedIds.push(id);
-        }
+    // kind === 'record'
+    if (!recordId) {
+        throw new McpError(ErrorCode.InvalidParams, 'Record IDs must include a record identifier');
     }
-    if (!effectiveDatasetId) {
-        throw new McpError(ErrorCode.InvalidParams, 'Could not determine dataset_id from parameters or encoded IDs');
-    }
-    // Retrieve documents using the decoded IDs
-    return retrieveDocuments({
-        ids: decodedIds,
-        datasetId: effectiveDatasetId,
-        domain
+    const documents = await retrieveDocuments({
+        ids: [recordId],
+        datasetId,
+        domain: resolvedDomain
     });
+    const document = documents[0];
+    if (!document) {
+        throw new McpError(ErrorCode.NotFound, `Record ${recordId} not found in dataset ${datasetId}`);
+    }
+    const title = document?.name || document?.title || `${datasetId} record ${recordId}`;
+    const responseObject = {
+        id,
+        title,
+        text: JSON.stringify(document, null, 2),
+        url: `${resolvedDomain}/dataset/${datasetId}/row/${recordId}`,
+        metadata: {
+            datasetId,
+            domain: resolvedDomain
+        }
+    };
+    return {
+        content: [
+            {
+                type: 'text',
+                text: JSON.stringify(responseObject)
+            }
+        ]
+    };
 }
 // Export all tools as an array (now includes all three tools)
-export const SOCRATA_TOOLS = [UNIFIED_SOCRATA_TOOL, SEARCH_TOOL, DOCUMENT_RETRIEVAL_TOOL];
+export const SOCRATA_TOOLS = [UNIFIED_SOCRATA_TOOL, SEARCH_TOOL, FETCH_TOOL];
 //# sourceMappingURL=socrata-tools.js.map
