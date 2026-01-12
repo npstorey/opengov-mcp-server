@@ -29,7 +29,7 @@ const ReadResourceRequestSchema = z.object({
 });
 dotenv.config();
 async function createServer(transport) {
-    console.log('[Server] Creating Server instance...');
+    console.error('[Server] Creating Server instance...');
     const server = new Server({ name: 'opengov-mcp-server', version: '0.1.5' }, {
         capabilities: {
             tools: {},
@@ -50,12 +50,12 @@ async function createServer(transport) {
     // Wrap setRequestHandler to log all registrations and calls
     const originalSetRequestHandler = server.setRequestHandler.bind(server);
     server.setRequestHandler = function (schema, handler) {
-        console.log('[Server] Registering handler for schema:', schema);
+        console.error('[Server] Registering handler for schema:', schema);
         return originalSetRequestHandler(schema, async (request, ...args) => {
-            console.log('[Server] Handler called with request:', JSON.stringify(request, null, 2));
+            console.error('[Server] Handler called with request:', JSON.stringify(request, null, 2));
             try {
                 const result = await handler(request, ...args);
-                console.log('[Server] Handler returned:', JSON.stringify(result, null, 2));
+                console.error('[Server] Handler returned:', JSON.stringify(result, null, 2));
                 return result;
             }
             catch (error) {
@@ -75,27 +75,27 @@ async function createServer(transport) {
             })
         });
         server.setRequestHandler(InitializeRequestSchema, async (request) => {
-            console.log('[Server - Initialize] Request received:', JSON.stringify(request, null, 2));
+            console.error('[Server - Initialize] Request received:', JSON.stringify(request, null, 2));
             const protocolVersion = request.params.protocolVersion || '2025-01-01';
             // Try to get session ID from the custom transport
             let sessionId;
             if (server._customTransport) {
                 // The transport should have the sessionId available after initialization
                 const transport = server._customTransport;
-                console.log('[Server - Initialize] Checking transport for session ID');
+                console.error('[Server - Initialize] Checking transport for session ID');
                 // The SDK's StreamableHTTPServerTransport will have sessionId property after initialization
                 if (transport.sessionId) {
                     sessionId = transport.sessionId;
-                    console.log('[Server - Initialize] Found sessionId on transport:', sessionId);
+                    console.error('[Server - Initialize] Found sessionId on transport:', sessionId);
                 }
                 else {
                     // Log available properties for debugging
-                    console.log('[Server - Initialize] Transport properties:', Object.getOwnPropertyNames(transport));
-                    console.log('[Server - Initialize] Transport prototype:', Object.getOwnPropertyNames(Object.getPrototypeOf(transport)));
+                    console.error('[Server - Initialize] Transport properties:', Object.getOwnPropertyNames(transport));
+                    console.error('[Server - Initialize] Transport prototype:', Object.getOwnPropertyNames(Object.getPrototypeOf(transport)));
                     // Check parent class properties
                     const parentProto = Object.getPrototypeOf(Object.getPrototypeOf(transport));
                     if (parentProto) {
-                        console.log('[Server - Initialize] Parent prototype properties:', Object.getOwnPropertyNames(parentProto));
+                        console.error('[Server - Initialize] Parent prototype properties:', Object.getOwnPropertyNames(parentProto));
                     }
                 }
             }
@@ -126,21 +126,21 @@ async function createServer(transport) {
             };
             // Add sessionId to response if we have it
             if (sessionId) {
-                console.log('[Server - Initialize] Adding sessionId to response body:', sessionId);
+                console.error('[Server - Initialize] Adding sessionId to response body:', sessionId);
                 response.sessionId = sessionId;
             }
             else {
-                console.log('[Server - Initialize] No sessionId available to add to response body');
+                console.error('[Server - Initialize] No sessionId available to add to response body');
             }
             return response;
         });
     }
     catch (e) {
-        console.log('[Server] Could not register initialize handler:', e);
+        console.error('[Server] Could not register initialize handler:', e);
     }
     // Handle ListTools
     server.setRequestHandler(ListToolsRequestSchema, async (request) => {
-        console.log('[Server - ListTools] Request received');
+        console.error('[Server - ListTools] Request received');
         const tools = [
             {
                 name: 'get_data',
@@ -161,12 +161,12 @@ async function createServer(transport) {
                 inputSchema: FETCH_TOOL.inputSchema
             }
         ];
-        console.log(`[Server - ListTools] Returning ${tools.length} tools: get_data, search, fetch`);
+        console.error(`[Server - ListTools] Returning ${tools.length} tools: get_data, search, fetch`);
         return { tools };
     });
     // Handle ListPrompts
     server.setRequestHandler(ListPromptsRequestSchema, async (request) => {
-        console.log('[Server - ListPrompts] Request received');
+        console.error('[Server - ListPrompts] Request received');
         const prompts = [
             {
                 name: 'analyze_nyc_data',
@@ -215,14 +215,14 @@ async function createServer(transport) {
                 ]
             }
         ];
-        console.log(`[Server - ListPrompts] Returning ${prompts.length} prompts`);
+        console.error(`[Server - ListPrompts] Returning ${prompts.length} prompts`);
         return {
             prompts
         };
     });
     // Handle ListResources
     server.setRequestHandler(ListResourcesRequestSchema, async (request) => {
-        console.log('[Server - ListResources] Request received');
+        console.error('[Server - ListResources] Request received');
         const resources = [
             {
                 uri: 'data://nyc/info/portal-overview',
@@ -246,7 +246,7 @@ async function createServer(transport) {
                 mimeType: 'text/markdown'
             }
         ];
-        console.log(`[Server - ListResources] Returning ${resources.length} resources`);
+        console.error(`[Server - ListResources] Returning ${resources.length} resources`);
         return {
             resources,
             nextCursor: undefined
@@ -254,7 +254,7 @@ async function createServer(transport) {
     });
     // Handle ReadResource
     server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-        console.log('[Server - ReadResource] Request received for URI:', request.params.uri);
+        console.error('[Server - ReadResource] Request received for URI:', request.params.uri);
         const resourceContents = {
             'data://nyc/info/portal-overview': {
                 uri: 'data://nyc/info/portal-overview',
@@ -382,14 +382,14 @@ https://data.cityofnewyork.us/resource/{dataset-id}.{format}
         if (!content) {
             throw new Error(`Resource not found: ${request.params.uri}`);
         }
-        console.log('[Server - ReadResource] Returning content for:', request.params.uri);
+        console.error('[Server - ReadResource] Returning content for:', request.params.uri);
         return {
             contents: [content]
         };
     });
     // Handle CallTool
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
-        console.log('[Server] CallTool request:', JSON.stringify(request, null, 2));
+        console.error('[Server] CallTool request:', JSON.stringify(request, null, 2));
         if (!request.params || typeof request.params !== 'object') {
             throw new Error('Invalid params: missing params object');
         }
@@ -398,11 +398,11 @@ https://data.cityofnewyork.us/resource/{dataset-id}.{format}
         // Handle search tool
         if (toolName === 'search') {
             try {
-                console.log(`[Server] Calling search tool with args:`, JSON.stringify(toolArgs, null, 2));
+                console.error(`[Server] Calling search tool with args:`, JSON.stringify(toolArgs, null, 2));
                 const parsed = searchToolZodSchema.parse(toolArgs);
-                console.log(`[Server] Parsed search params:`, JSON.stringify(parsed, null, 2));
+                console.error(`[Server] Parsed search params:`, JSON.stringify(parsed, null, 2));
                 const result = await handleSearchTool(parsed);
-                console.log('[Tool] Search result:', JSON.stringify(result, null, 2));
+                console.error('[Tool] Search result:', JSON.stringify(result, null, 2));
                 return {
                     content: result.content,
                     isError: false
@@ -419,11 +419,11 @@ https://data.cityofnewyork.us/resource/{dataset-id}.{format}
         // Handle fetch tool
         if (toolName === 'fetch') {
             try {
-                console.log(`[Server] Calling fetch tool with args:`, JSON.stringify(toolArgs, null, 2));
+                console.error(`[Server] Calling fetch tool with args:`, JSON.stringify(toolArgs, null, 2));
                 const parsed = fetchToolZodSchema.parse(toolArgs);
-                console.log(`[Server] Parsed fetch params:`, JSON.stringify(parsed, null, 2));
+                console.error(`[Server] Parsed fetch params:`, JSON.stringify(parsed, null, 2));
                 const result = await handleFetchTool(parsed);
-                console.log('[Tool] Fetch result:', JSON.stringify(result, null, 2));
+                console.error('[Tool] Fetch result:', JSON.stringify(result, null, 2));
                 return {
                     content: result.content,
                     isError: false
@@ -440,15 +440,15 @@ https://data.cityofnewyork.us/resource/{dataset-id}.{format}
         // Handle original get_data tool for backward compatibility
         if (toolName === UNIFIED_SOCRATA_TOOL.name) {
             try {
-                console.log(`[Server] Calling tool: ${toolName} with args:`, JSON.stringify(toolArgs, null, 2));
+                console.error(`[Server] Calling tool: ${toolName} with args:`, JSON.stringify(toolArgs, null, 2));
                 const parsed = socrataToolZodSchema.parse(toolArgs);
-                console.log(`[Server] Parsed Socrata params:`, JSON.stringify(parsed, null, 2));
+                console.error(`[Server] Parsed Socrata params:`, JSON.stringify(parsed, null, 2));
                 const handler = UNIFIED_SOCRATA_TOOL.handler;
                 if (typeof handler !== 'function') {
                     throw new Error('Tool handler is not a function');
                 }
                 const result = await handler(parsed);
-                console.log('[Tool] Result:', JSON.stringify(result, null, 2));
+                console.error('[Tool] Result:', JSON.stringify(result, null, 2));
                 let responseText;
                 if (result === null || result === undefined) {
                     responseText = String(result);
@@ -479,7 +479,7 @@ https://data.cityofnewyork.us/resource/{dataset-id}.{format}
             throw new Error(`Method not found: ${toolName}`);
         }
     });
-    console.log('[Server] Server instance created and request handlers registered.');
+    console.error('[Server] Server instance created and request handlers registered.');
     return server;
 }
 // Global map to store transports by session ID
@@ -488,7 +488,7 @@ async function startApp() {
     try {
         const app = express();
         const port = Number(process.env.PORT) || 8000;
-        console.log('[Environment] DATA_PORTAL_URL:', process.env.DATA_PORTAL_URL);
+        console.error('[Environment] DATA_PORTAL_URL:', process.env.DATA_PORTAL_URL);
         // IMPORTANT: NO express.json() before /mcp route!
         // CORS configuration
         app.use(cors({
@@ -509,7 +509,7 @@ async function startApp() {
         app.use(mcpPath, express.text({ type: '*/*' }));
         // Health check
         app.get('/healthz', (_req, res) => {
-            console.log('[Health] /healthz hit');
+            console.error('[Health] /healthz hit');
             res.sendStatus(200);
         });
         // Root endpoint
@@ -518,7 +518,7 @@ async function startApp() {
         });
         // Debug endpoint to test server
         app.get('/debug', async (_req, res) => {
-            console.log('[Debug] Testing server state...');
+            console.error('[Debug] Testing server state...');
             res.json({
                 server: 'running',
                 activeSessions: transports.size,
@@ -531,19 +531,19 @@ async function startApp() {
         // Remove old global transport creation - we'll create per-session instead
         // Helper function to create and setup a new transport/server pair
         async function createTransportAndServer(sessionId) {
-            console.log('[MCP] Creating new transport/server pair', sessionId ? `for session ${sessionId}` : 'for initialization');
+            console.error('[MCP] Creating new transport/server pair', sessionId ? `for session ${sessionId}` : 'for initialization');
             const transport = new OpenAICompatibleTransport({
                 sessionIdGenerator: () => {
                     const newSessionId = crypto.randomBytes(16).toString('hex');
-                    console.log('[Transport] sessionIdGenerator called! Generated:', newSessionId);
+                    console.error('[Transport] sessionIdGenerator called! Generated:', newSessionId);
                     return newSessionId;
                 },
                 // Pass callbacks in constructor options
                 onsessioninitialized: (initializedSessionId) => {
-                    console.log('[Transport] onsessioninitialized fired! Session:', initializedSessionId);
+                    console.error('[Transport] onsessioninitialized fired! Session:', initializedSessionId);
                     // Store the transport in our map when session is initialized
                     if (!transports.has(initializedSessionId)) {
-                        console.log('[Transport] Storing transport for session:', initializedSessionId);
+                        console.error('[Transport] Storing transport for session:', initializedSessionId);
                         // Transport and server are already created, just need to store the reference
                         const entry = transports.get('__pending__');
                         if (entry) {
@@ -553,10 +553,10 @@ async function startApp() {
                     }
                 },
                 onsessionclosed: (closedSessionId) => {
-                    console.log('[Transport] onsessionclosed fired! Session:', closedSessionId);
+                    console.error('[Transport] onsessionclosed fired! Session:', closedSessionId);
                     // Clean up transport from map
                     if (transports.has(closedSessionId)) {
-                        console.log('[Transport] Removing transport for closed session:', closedSessionId);
+                        console.error('[Transport] Removing transport for closed session:', closedSessionId);
                         const entry = transports.get(closedSessionId);
                         if (entry) {
                             entry.cleanup().catch(err => console.error('[Transport] Error during cleanup:', err));
@@ -567,25 +567,25 @@ async function startApp() {
             });
             // Setup transport event handlers
             transport.onmessage = (message, extra) => {
-                console.log('[Transport] onmessage fired!', JSON.stringify(message, null, 2));
+                console.error('[Transport] onmessage fired!', JSON.stringify(message, null, 2));
                 if (extra) {
-                    console.log('[Transport] onmessage extra:', JSON.stringify(extra, null, 2));
+                    console.error('[Transport] onmessage extra:', JSON.stringify(extra, null, 2));
                 }
             };
             transport.onerror = (error) => {
                 console.error('[Transport] onerror fired! Error:', error);
             };
             transport.onclose = () => {
-                console.log('[Transport] onclose fired!');
+                console.error('[Transport] onclose fired!');
             };
             // Wrap handleRequest to see what's happening
             const originalHandleRequest = transport.handleRequest.bind(transport);
             transport.handleRequest = async (req, res) => {
-                console.log('[Transport.handleRequest] Called');
-                console.log('[Transport.handleRequest] Method:', req.method);
-                console.log('[Transport.handleRequest] URL:', req.url);
-                console.log('[Transport.handleRequest] Session ID:', transport.sessionId);
-                console.log('[Transport.handleRequest] Transport internal state:', {
+                console.error('[Transport.handleRequest] Called');
+                console.error('[Transport.handleRequest] Method:', req.method);
+                console.error('[Transport.handleRequest] URL:', req.url);
+                console.error('[Transport.handleRequest] Session ID:', transport.sessionId);
+                console.error('[Transport.handleRequest] Transport internal state:', {
                     hasServer: !!transport._server,
                     hasSession: !!transport._session,
                     serverInfo: transport._server ? {
@@ -597,7 +597,7 @@ async function startApp() {
                     // The SDK's handleRequest actually accepts a third parameter for parsed body
                     const body = req.body;
                     const result = await originalHandleRequest(req, res, body);
-                    console.log('[Transport.handleRequest] Completed, result:', result);
+                    console.error('[Transport.handleRequest] Completed, result:', result);
                     return result;
                 }
                 catch (error) {
@@ -608,12 +608,12 @@ async function startApp() {
             // Create server (passing transport so initialize handler can access session ID)
             const server = await createServer(transport);
             // Connect server to transport
-            console.log('[MCP] Connecting server to transport...');
+            console.error('[MCP] Connecting server to transport...');
             await server.connect(transport);
-            console.log('[MCP] Server connected');
+            console.error('[MCP] Server connected');
             // Create cleanup function
             const cleanup = async () => {
-                console.log('[Cleanup] Cleaning up transport and server');
+                console.error('[Cleanup] Cleaning up transport and server');
                 try {
                     if ('close' in server && typeof server.close === 'function') {
                         await server.close();
@@ -637,15 +637,15 @@ async function startApp() {
             if (sessionId && lastResponseTimestamps.has(sessionId)) {
                 const lastResponse = lastResponseTimestamps.get(sessionId);
                 const timeSinceLastResponse = requestStartTime - lastResponse.timestamp;
-                console.log(`[Express] Time since last ${lastResponse.method} response: ${timeSinceLastResponse}ms`);
+                console.error(`[Express] Time since last ${lastResponse.method} response: ${timeSinceLastResponse}ms`);
                 // Special logging for DELETE after tools/list
                 if (req.method === 'DELETE' && lastResponse.method === 'tools/list') {
-                    console.log(`[Express] ⚠️  DELETE request received ${timeSinceLastResponse}ms after tools/list response`);
+                    console.error(`[Express] ⚠️  DELETE request received ${timeSinceLastResponse}ms after tools/list response`);
                 }
             }
-            console.log(`[Express] ${req.method} ${req.url}`);
-            console.log('[Express] Request timestamp:', new Date().toISOString());
-            console.log('[Express] Headers:', {
+            console.error(`[Express] ${req.method} ${req.url}`);
+            console.error('[Express] Request timestamp:', new Date().toISOString());
+            console.error('[Express] Headers:', {
                 'accept': req.headers.accept,
                 'content-type': req.headers['content-type'],
                 'mcp-session-id': req.headers['mcp-session-id'],
@@ -658,26 +658,26 @@ async function startApp() {
                 .filter(([key]) => key.toLowerCase().startsWith('mcp-'))
                 .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {});
             if (Object.keys(mcpHeaders).length > 0) {
-                console.log('[Express] All MCP headers:', mcpHeaders);
+                console.error('[Express] All MCP headers:', mcpHeaders);
             }
             // Track current request body for response interceptors
             let currentRequestBody = null;
             let protocolVersion = undefined;
             // For POST requests, log parsed body (now available via Express body parser)
             if (req.method === 'POST' && req.body) {
-                console.log('[Express] Request body:', req.body);
+                console.error('[Express] Request body:', req.body);
                 currentRequestBody = req.body;
                 // Check if this is an initialize request without a session ID
                 try {
                     const parsed = JSON.parse(req.body);
                     if (parsed.method === 'initialize') {
                         protocolVersion = parsed.params?.protocolVersion;
-                        console.log('[Express] Initialize request detected:');
-                        console.log('  - Protocol version:', protocolVersion);
-                        console.log('  - Has session ID:', !!req.headers['mcp-session-id']);
-                        console.log('  - Client:', parsed.params?.clientInfo?.name);
+                        console.error('[Express] Initialize request detected:');
+                        console.error('  - Protocol version:', protocolVersion);
+                        console.error('  - Has session ID:', !!req.headers['mcp-session-id']);
+                        console.error('  - Client:', parsed.params?.clientInfo?.name);
                         if (!req.headers['mcp-session-id']) {
-                            console.log('[Express] Initialize request without session ID detected - this is expected for first request');
+                            console.error('[Express] Initialize request without session ID detected - this is expected for first request');
                         }
                     }
                 }
@@ -702,11 +702,11 @@ async function startApp() {
             if (existingSessionId && transports.has(existingSessionId)) {
                 // Use existing transport for this session
                 transportEntry = transports.get(existingSessionId);
-                console.log('[Express] Using existing transport for session:', existingSessionId);
+                console.error('[Express] Using existing transport for session:', existingSessionId);
             }
             else if (!existingSessionId && isInitializeRequest) {
                 // Create new transport for initialization request
-                console.log('[Express] Creating new transport for initialization request');
+                console.error('[Express] Creating new transport for initialization request');
                 transportEntry = await createTransportAndServer();
                 // Temporarily store with pending key until session ID is assigned
                 transports.set('__pending__', transportEntry);
@@ -749,15 +749,15 @@ async function startApp() {
             // Track if we're writing an initialize response
             let isInitializeResponse = false;
             res.setHeader = function (name, value) {
-                console.log(`[Express] Response.setHeader: ${name} = ${value}`);
+                console.error(`[Express] Response.setHeader: ${name} = ${value}`);
                 // If setting up SSE, add keep-alive
                 if (name.toLowerCase() === 'content-type' && value === 'text/event-stream') {
-                    console.log('[Express] SSE stream detected, setting up keep-alive');
+                    console.error('[Express] SSE stream detected, setting up keep-alive');
                     // Send a comment every 30 seconds to keep the connection alive
                     const keepAliveInterval = setInterval(() => {
                         try {
                             res.write(': keep-alive\n\n');
-                            console.log('[Express] Sent SSE keep-alive comment');
+                            console.error('[Express] Sent SSE keep-alive comment');
                         }
                         catch (err) {
                             console.error('[Express] Failed to send keep-alive:', err);
@@ -768,7 +768,7 @@ async function startApp() {
                     const cleanup = () => {
                         if (keepAliveInterval) {
                             clearInterval(keepAliveInterval);
-                            console.log('[Express] Cleaned up SSE keep-alive interval');
+                            console.error('[Express] Cleaned up SSE keep-alive interval');
                         }
                     };
                     res.on('close', cleanup);
@@ -778,20 +778,20 @@ async function startApp() {
                 return originalSetHeader.call(this, name, value);
             };
             res.json = function (data) {
-                console.log('[Express] Response.json:', JSON.stringify(data, null, 2));
+                console.error('[Express] Response.json:', JSON.stringify(data, null, 2));
                 // If this is an initialize response, ensure we're sending the session ID
                 if (data && data.result && !data.error) {
                     const sessionId = res.getHeader('mcp-session-id');
                     if (sessionId) {
-                        console.log('[Express] Initialize response includes session ID in header:', sessionId);
+                        console.error('[Express] Initialize response includes session ID in header:', sessionId);
                     }
                 }
                 return originalJson.call(this, data);
             };
             res.write = function (chunk, encoding, callback) {
-                console.log('[Express] Response.write called, data length:', chunk ? chunk.length : 0);
+                console.error('[Express] Response.write called, data length:', chunk ? chunk.length : 0);
                 // Enhanced logging with response metadata
-                console.log('[Express] Response metadata:', {
+                console.error('[Express] Response metadata:', {
                     timestamp: new Date().toISOString(),
                     sessionId: res.getHeader('mcp-session-id'),
                     contentType: res.getHeader('Content-Type'),
@@ -801,10 +801,10 @@ async function startApp() {
                     const chunkStr = chunk.toString();
                     // Log raw data with increased limit (2000 bytes)
                     if (chunk.length < 2000) {
-                        console.log('[Express] Response.write data:', chunkStr);
+                        console.error('[Express] Response.write data:', chunkStr);
                     }
                     else {
-                        console.log('[Express] Response.write data (truncated):', chunkStr.substring(0, 2000) + '... [TRUNCATED]');
+                        console.error('[Express] Response.write data (truncated):', chunkStr.substring(0, 2000) + '... [TRUNCATED]');
                     }
                     // Parse SSE data for structured logging
                     if (chunkStr.includes('event:') && chunkStr.includes('data:')) {
@@ -812,12 +812,12 @@ async function startApp() {
                             const dataMatch = chunkStr.match(/data:\s*(.+?)(?:\n\n|$)/s);
                             if (dataMatch) {
                                 const jsonData = JSON.parse(dataMatch[1]);
-                                console.log('[Express] SSE JSON payload:', JSON.stringify(jsonData, null, 2));
+                                console.error('[Express] SSE JSON payload:', JSON.stringify(jsonData, null, 2));
                                 // Log specific information based on response type
                                 if (jsonData.result && jsonData.result.tools) {
-                                    console.log('[Express] Tools count:', jsonData.result.tools.length);
+                                    console.error('[Express] Tools count:', jsonData.result.tools.length);
                                     jsonData.result.tools.forEach((tool, index) => {
-                                        console.log(`[Express] Tool[${index}]:`, {
+                                        console.error(`[Express] Tool[${index}]:`, {
                                             name: tool.name,
                                             hasInputSchema: !!tool.inputSchema,
                                             hasRequired: !!(tool.inputSchema && tool.inputSchema.required),
@@ -828,7 +828,7 @@ async function startApp() {
                             }
                         }
                         catch (e) {
-                            console.log('[Express] Failed to parse SSE JSON:', e instanceof Error ? e.message : String(e));
+                            console.error('[Express] Failed to parse SSE JSON:', e instanceof Error ? e.message : String(e));
                         }
                     }
                     // Detect initialize response
@@ -837,7 +837,7 @@ async function startApp() {
                             const parsed = JSON.parse(currentRequestBody);
                             if (parsed.method === 'initialize' && chunkStr.includes('"result":') && chunkStr.includes('"protocolVersion":')) {
                                 isInitializeResponse = true;
-                                console.log('[Express] Detected initialize response');
+                                console.error('[Express] Detected initialize response');
                             }
                         }
                         catch (e) {
@@ -862,12 +862,12 @@ async function startApp() {
                 return result;
             };
             res.end = function (chunk, encoding, callback) {
-                console.log('[Express] Response.end called');
+                console.error('[Express] Response.end called');
                 if (chunk) {
                     const preview = typeof chunk === 'string' ? chunk.substring(0, 500) :
                         Buffer.isBuffer(chunk) ? chunk.toString().substring(0, 500) :
                             'non-string data';
-                    console.log('[Express] Response.end data:', preview);
+                    console.error('[Express] Response.end data:', preview);
                 }
                 // Removed extra roots.listChanged event - not part of MCP spec and causes issues with OpenAI
                 if (typeof chunk === 'function') {
@@ -894,20 +894,20 @@ async function startApp() {
                 return originalEnd.call(this, chunk, encoding, callback);
             };
             try {
-                console.log('[Express] Calling transport.handleRequest...');
+                console.error('[Express] Calling transport.handleRequest...');
                 await transport.handleRequest(req, res);
-                console.log('[Express] transport.handleRequest returned');
-                console.log('[Express] Response headersSent:', res.headersSent);
-                console.log('[Express] Response finished:', res.finished);
+                console.error('[Express] transport.handleRequest returned');
+                console.error('[Express] Response headersSent:', res.headersSent);
+                console.error('[Express] Response finished:', res.finished);
                 // Handle DELETE request cleanup
                 if (req.method === 'DELETE' && existingSessionId) {
-                    console.log('[Express] DELETE request processed, checking if session should be cleaned up');
+                    console.error('[Express] DELETE request processed, checking if session should be cleaned up');
                     // The transport's onsessionclosed callback will handle cleanup
                     // We just need to ensure it happens
                 }
                 // Log request completion timing and track for timing analysis
                 const requestDuration = Date.now() - requestStartTime;
-                console.log('[Express] Request completed in', requestDuration, 'ms');
+                console.error('[Express] Request completed in', requestDuration, 'ms');
                 // Track response timestamp for timing analysis
                 const currentSessionId = existingSessionId || transport.sessionId;
                 if (currentSessionId && currentRequestBody) {
@@ -918,7 +918,7 @@ async function startApp() {
                                 method: parsed.method,
                                 timestamp: Date.now()
                             });
-                            console.log(`[Express] Recorded response timestamp for ${parsed.method}`);
+                            console.error(`[Express] Recorded response timestamp for ${parsed.method}`);
                         }
                     }
                     catch (e) {
@@ -933,32 +933,32 @@ async function startApp() {
                 }
                 // Log error timing
                 const requestDuration = Date.now() - requestStartTime;
-                console.log('[Express] Request failed after', requestDuration, 'ms');
+                console.error('[Express] Request failed after', requestDuration, 'ms');
             }
         });
         // Start server
         const httpServer = app.listen(port, '0.0.0.0', () => {
-            console.log(`🚀 Server running on port ${port}`);
-            console.log(`   Health: http://localhost:${port}/healthz`);
-            console.log(`   MCP: http://localhost:${port}/mcp`);
-            console.log(`   Debug: http://localhost:${port}/debug`);
-            console.log('[Startup] Transports map ready');
-            console.log('[Startup] Active sessions:', transports.size);
+            console.error(`🚀 Server running on port ${port}`);
+            console.error(`   Health: http://localhost:${port}/healthz`);
+            console.error(`   MCP: http://localhost:${port}/mcp`);
+            console.error(`   Debug: http://localhost:${port}/debug`);
+            console.error('[Startup] Transports map ready');
+            console.error('[Startup] Active sessions:', transports.size);
         });
         // Graceful shutdown
         const gracefulShutdown = async (signal) => {
-            console.log(`${signal} signal received: closing resources.`);
+            console.error(`${signal} signal received: closing resources.`);
             // Close all active transports
-            console.log(`Closing ${transports.size} active transports...`);
+            console.error(`Closing ${transports.size} active transports...`);
             for (const [sessionId, entry] of transports) {
                 if (sessionId !== '__pending__') {
-                    console.log(`Closing transport for session ${sessionId}...`);
+                    console.error(`Closing transport for session ${sessionId}...`);
                     await entry.cleanup().catch((e) => console.error(`Error closing session ${sessionId}:`, e));
                 }
             }
             transports.clear();
             httpServer.close(() => {
-                console.log('HTTP server closed.');
+                console.error('HTTP server closed.');
                 process.exit(0);
             });
         };
