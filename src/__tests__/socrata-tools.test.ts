@@ -17,22 +17,19 @@ vi.mock('../utils/api.js', () => ({
       return { id: 'test-dataset', name: 'Test Dataset', columns: [] };
     } else if (path.startsWith('/resource/')) {
       return [{ id: '1', name: 'Record 1' }];
-    } else if (path === '/api/site_metrics.json') {
-      return { datasets: 100, views: 1000 };
     }
     return { error: 'Unexpected path' };
   })
 }));
 
 // Now import the actual functions
-import { 
-  handleCatalogTool as handleCatalog, 
-  handleCategoriesTool as handleCategories, 
+import {
+  handleCatalogTool as handleCatalog,
+  handleCategoriesTool as handleCategories,
   handleTagsTool as handleTags,
   handleDatasetMetadataTool as handleDatasetMetadata,
   handleColumnInfoTool as handleColumnInfo,
   handleDataAccessTool as handleDataAccess,
-  handleSiteMetricsTool as handleSiteMetrics,
   handleSocrataTool,
   UNIFIED_SOCRATA_TOOL
 } from '../tools/socrata-tools.js';
@@ -256,29 +253,15 @@ describe('Socrata Tools', () => {
     });
   });
 
-  describe('handleSiteMetrics', () => {
-    it('should fetch site metrics with correct parameters', async () => {
-      await handleSiteMetrics({});
-      
-      expect(mockedFetchFromSocrataApi).toHaveBeenCalledTimes(1);
-      expect(mockedFetchFromSocrataApi).toHaveBeenCalledWith(
-        '/api/site_metrics.json',
-        {},
-        'https://data.cityofchicago.org'
-      );
-    });
-  });
-
   describe('handleSocrataTool', () => {
     it('should route to the correct handler based on type', async () => {
       // Test each type of operation
       await handleSocrataTool({ type: 'catalog', query: 'budget' });
       await handleSocrataTool({ type: 'metadata', query: 'abc-123' });
       await handleSocrataTool({ type: 'query', dataset_id: 'abc-123', limit: 20 });
-      await handleSocrataTool({ type: 'metrics' });
-      
+
       // Verify that each call counts (query type makes 2 calls - count + data)
-      expect(mockedFetchFromSocrataApi).toHaveBeenCalledTimes(5);
+      expect(mockedFetchFromSocrataApi).toHaveBeenCalledTimes(4);
     });
 
     it('should map query to $query for query operations', async () => {
@@ -305,10 +288,21 @@ describe('Socrata Tools', () => {
 
     it('should throw an error when datasetId is missing for dataset operations', async () => {
       await expect(handleSocrataTool({ type: 'metadata' }))
-        .rejects.toThrow('Query (expected as dataset_id) is required for type=metadata');
-      
+        .rejects.toThrow('dataset_id is required for type=metadata');
+
       await expect(handleSocrataTool({ type: 'query' }))
         .rejects.toThrow('Dataset ID (from dataset_id field, or from query field if not a SoQL SELECT) is required for type=query operation.');
+    });
+
+    it('should accept dataset_id directly for metadata operations', async () => {
+      await handleSocrataTool({ type: 'metadata', dataset_id: 'xyz-789' });
+
+      expect(mockedFetchFromSocrataApi).toHaveBeenCalledTimes(1);
+      expect(mockedFetchFromSocrataApi).toHaveBeenCalledWith(
+        '/api/views/xyz-789',
+        {},
+        'https://data.cityofchicago.org'
+      );
     });
   });
 
@@ -319,19 +313,19 @@ describe('Socrata Tools', () => {
       expect(typeof UNIFIED_SOCRATA_TOOL.description).toBe('string');
     });
 
-    it('should have a valid parameters', () => {
-      const schema = UNIFIED_SOCRATA_TOOL.parameters as any;
-      
+    it('should have a valid inputSchema', () => {
+      const schema = UNIFIED_SOCRATA_TOOL.inputSchema as any;
+
       // Verify required properties
       expect(schema.type).toBe('object');
-      
+
       // Ensure properties object exists
       expect(schema.properties).toBeDefined();
       if (!schema.properties) return; // TypeScript guard
-      
+
       // Verify type property exists
       expect(schema.properties.type).toBeDefined();
-      
+
       // Verify query property exists
       expect(schema.properties.query).toBeDefined();
     });

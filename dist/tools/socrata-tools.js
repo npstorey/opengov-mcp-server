@@ -136,13 +136,6 @@ async function handleDataAccess(params) {
     const response = await fetchFromSocrataApi(`/resource/${datasetId}.json`, apiParams, baseUrl);
     return response;
 }
-// Handler for site metrics functionality
-async function handleSiteMetrics(params) {
-    const { domain = getDefaultDomain() } = params;
-    const baseUrl = `https://${domain}`;
-    const response = await fetchFromSocrataApi('/api/site_metrics.json', {}, baseUrl);
-    return response;
-}
 // Zod schemas for different tool types
 // Search tool schema - matches OpenAI requirements (single query string)
 export const searchToolZodSchema = z.object({
@@ -155,7 +148,7 @@ export const fetchToolZodSchema = z.object({
 // 1️⃣ Zod definition for the Socrata tool's parameters.
 // This is used by the MCP SDK to parse/validate parameters from the client.
 export const socrataToolZodSchema = z.object({
-    type: z.enum(['catalog', 'metadata', 'query', 'metrics'])
+    type: z.enum(['catalog', 'metadata', 'query'])
         .describe('Operation to perform'),
     query: z.string().min(1).optional()
         .describe('General search phrase OR a full SoQL query string. If this is a full SoQL query (e.g., starts with SELECT), other SoQL parameters like select, where, q might be overridden or ignored by the handler in favor of the full SoQL query. If it\'s a search phrase, it will likely be used for a full-text search ($q parameter to Socrata).'),
@@ -178,7 +171,7 @@ const jsonParameters = {
     properties: {
         type: {
             type: 'string',
-            enum: ['catalog', 'metadata', 'query', 'metrics'],
+            enum: ['catalog', 'metadata', 'query'],
             description: 'Operation to perform'
         },
         query: {
@@ -318,12 +311,11 @@ export async function handleSocrataTool(rawParams
                 offset: modifiableParams.offset
             });
         case 'metadata':
-            console.warn("[handleSocrataTool] 'metadata' case needs review: 'query' param received, but 'dataset_id' was expected for dataset metadata.");
-            if (!query)
-                throw new Error('Query (expected as dataset_id) is required for type=metadata');
-            // Ensure dataset_id is passed; prefer params.dataset_id if available, else use query.
+            const metadataDatasetId = modifiableParams.dataset_id || query;
+            if (!metadataDatasetId)
+                throw new Error('dataset_id is required for type=metadata');
             return handleDatasetMetadata({
-                datasetId: modifiableParams.dataset_id || query,
+                datasetId: metadataDatasetId,
                 domain: modifiableParams.domain
             });
         case 'query': // This corresponds to 'data-access'
@@ -369,8 +361,6 @@ export async function handleSocrataTool(rawParams
                 having: passAsHaving,
                 q: passAsQ
             });
-        case 'metrics':
-            return handleSiteMetrics({ domain: modifiableParams.domain });
         // The following cases are not in the socrataToolZodSchema's 'type' enum,
         // so they won't be directly callable unless the schema is updated.
         // Consider adding them to the enum and jsonParameters if they should be exposed.
@@ -392,7 +382,7 @@ export async function handleSocrataTool(rawParams
             // This case should ideally not be reached if SDK validation is working with the enum.
             // However, to satisfy exhaustiveness for `type` from SocrataToolParams:
             const exhaustiveCheck = type;
-            throw new Error(`Unknown Socrata operation type: ${exhaustiveCheck}. Supported types are catalog, metadata, query, metrics.`);
+            throw new Error(`Unknown Socrata operation type: ${exhaustiveCheck}. Supported types are catalog, metadata, query.`);
     }
 }
 // Export for backward compatibility (we'll remove this later)
@@ -402,7 +392,6 @@ export const handleTagsTool = handleTags;
 export const handleDatasetMetadataTool = handleDatasetMetadata;
 export const handleColumnInfoTool = handleColumnInfo;
 export const handleDataAccessTool = handleDataAccess;
-export const handleSiteMetricsTool = handleSiteMetrics;
 const STRICT_DATASET_ID_REGEX = /^[a-z0-9]{4}-[a-z0-9]{4}$/i;
 const DATASET_ID_IN_PATH_REGEX = /[a-z0-9]{4}-[a-z0-9]{4}/i;
 function tryParseUrlIdentifier(input) {
