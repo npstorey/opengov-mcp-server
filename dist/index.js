@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { OpenAICompatibleTransport } from './openai-compatible-transport.js';
 import express from 'express';
 import dotenv from 'dotenv';
@@ -977,5 +978,25 @@ async function startApp() {
         process.exit(1);
     }
 }
-startApp().catch(console.error);
+// Check for --stdio flag to determine transport mode
+if (process.argv.includes('--stdio')) {
+    // Stdio mode for Claude Code / Cursor
+    (async () => {
+        try {
+            console.error('[Startup] Starting in stdio mode...');
+            const transport = new StdioServerTransport();
+            const server = await createServer();
+            await server.connect(transport);
+            console.error('[Startup] Server connected to stdio transport');
+        }
+        catch (error) {
+            console.error('[Fatal] Error starting stdio server:', error);
+            process.exit(1);
+        }
+    })();
+}
+else {
+    // HTTP mode for web clients (Vercel deployment)
+    startApp().catch(console.error);
+}
 //# sourceMappingURL=index.js.map
